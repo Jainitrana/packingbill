@@ -1,0 +1,3670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Packing System & Smart Rate Engine</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS for real .xlsx Excel generation -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <!-- Google Fonts: Plus Jakarta Sans & Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    @media (max-width: 639px) {
+      input, select { font-size: 16px !important; }
+    }
+    @page {
+      size: A4 portrait;
+      margin: 12mm;
+    }
+    @media print {
+      html, body {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        height: auto !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      body > *:not(#print-voucher-area) {
+        display: none !important;
+      }
+      #print-voucher-area {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      #print-voucher-area * {
+        visibility: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-5 right-4 left-4 sm:left-auto sm:right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- FULL-SCREEN WORKSPACE LOCK OVERLAY (SHOWN IMMEDIATELY ON LOAD) -->
+  <div id="screen-lock-overlay" class="fixed inset-0 z-50 bg-slate-900 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm p-7 text-center">
+      <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center font-extrabold text-lg mx-auto shadow-md">
+        PS
+      </div>
+      <h2 class="text-lg font-extrabold text-slate-900 mt-4">Packing System Access</h2>
+      <p class="text-xs text-slate-500 mt-1">Enter your password to decrypt and open the packing ledger.</p>
+      <form onsubmit="unlockScreenLock(event)" class="mt-5 space-y-3">
+        <input type="password" id="screen-lock-password" placeholder="Enter password" required autofocus class="w-full px-4 py-3 rounded-xl border border-slate-300 text-sm text-center font-semibold focus:border-emerald-500 outline-none" />
+        <button type="submit" id="screen-lock-btn" class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-xs transition cursor-pointer">
+          Unlock Workspace
+        </button>
+      </form>
+      <p id="screen-lock-error" class="hidden text-xs font-semibold text-rose-600 mt-3">Incorrect password. Access denied.</p>
+      <p class="text-[11px] text-slate-400 mt-5">Copyright to @Jainitrana</p>
+    </div>
+  </div>
+
+  <!-- TOP NAVIGATION BAR (CLEAN 2-TIER RESPONSIVE LAYOUT — ZERO OVERLAP) -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs">
+    <!-- Tier 1: Brand & Primary Actions -->
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2">
+      <!-- Brand Identity -->
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center font-extrabold text-xs shadow-xs">
+          PS
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight truncate">
+              Packing System
+            </h1>
+            <button type="button" onclick="openRateDrawer('settings')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer shrink-0">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span id="storage-badge-text">Saved</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-500 hidden lg:block truncate" id="storage-subtext">Multi-Month Offline Ledger & Smart Rate Engine</p>
+        </div>
+      </div>
+
+      <!-- Right Action Buttons -->
+      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <!-- Download Standard Production Template Button -->
+        <button type="button" onclick="downloadProductionTemplate()" class="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 transition cursor-pointer" title="Download clean standard Excel template">
+          <svg class="w-4 h-4 text-indigo-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <span>Template</span>
+        </button>
+
+        <!-- Import Production Excel Button -->
+        <label class="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2 min-h-[38px] rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition cursor-pointer" title="Upload Production Sheet (.xlsx)">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          <span class="hidden sm:inline">Import</span>
+          <input type="file" id="excel-import-input" accept=".xlsx,.xls,.csv" onchange="handleProductionExcelUpload(event)" class="hidden" />
+        </label>
+
+        <!-- Company & Product Summary Button -->
+        <button type="button" onclick="openProductionSummaryModal()" class="hidden sm:inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2 min-h-[38px] rounded-xl text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition cursor-pointer" title="Company & Product Summary">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          <span class="hidden md:inline">Summary</span>
+        </button>
+
+        <!-- Print A4 Payment Voucher Button -->
+        <button type="button" onclick="openPrintVoucherModal()" class="hidden sm:inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2 min-h-[38px] rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 transition cursor-pointer" title="Print Payment Slip">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          <span class="hidden md:inline">Print Slip</span>
+        </button>
+
+        <!-- Export Excel Dropdown -->
+        <div class="relative" id="export-dropdown-wrapper">
+          <button type="button" onclick="toggleExportMenu()" class="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2 min-h-[38px] rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition cursor-pointer" title="Export Excel">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span class="hidden sm:inline">Export</span>
+            <svg class="w-3.5 h-3.5 opacity-80" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+
+          <div id="export-menu" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-40">
+            <div class="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Download .XLSX (Filtered Period)</div>
+            <button type="button" onclick="exportSingleWorkerExcel()" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition flex items-start gap-3 cursor-pointer">
+              <span class="text-base">📄</span>
+              <div>
+                <div class="text-xs font-bold text-slate-900">Single Worker (<span id="menu-worker-label">Bhgwati</span>)</div>
+                <div class="text-[11px] text-slate-500">Clean contractor sheet with advance & net total</div>
+              </div>
+            </button>
+            <div class="border-t border-slate-100 my-1"></div>
+            <button type="button" onclick="exportAllWorkersExcel()" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition flex items-start gap-3 cursor-pointer">
+              <span class="text-base">📊</span>
+              <div>
+                <div class="text-xs font-bold text-slate-900">All-in-One Master Sheet</div>
+                <div class="text-[11px] text-slate-500">All workers stacked with blank row spacing & G.Total</div>
+              </div>
+            </button>
+            <div class="lg:hidden border-t border-slate-100 my-1"></div>
+            <button type="button" onclick="downloadProductionTemplate(); toggleExportMenu();" class="lg:hidden w-full text-left px-4 py-2.5 hover:bg-slate-50 transition flex items-start gap-3 cursor-pointer">
+              <span class="text-base">📋</span>
+              <div>
+                <div class="text-xs font-bold text-indigo-700">Download Blank Template</div>
+                <div class="text-[11px] text-slate-500">Standard Excel format for daily entry</div>
+              </div>
+            </button>
+            <button type="button" onclick="openProductionSummaryModal(); toggleExportMenu();" class="sm:hidden w-full text-left px-4 py-2.5 hover:bg-slate-50 transition flex items-start gap-3 cursor-pointer">
+              <span class="text-base">📈</span>
+              <div>
+                <div class="text-xs font-bold text-amber-700">Company & Product Summary</div>
+                <div class="text-[11px] text-slate-500">View brand-wise bags, MT & cost</div>
+              </div>
+            </button>
+            <button type="button" onclick="openPrintVoucherModal(); toggleExportMenu();" class="sm:hidden w-full text-left px-4 py-2.5 hover:bg-slate-50 transition flex items-start gap-3 cursor-pointer">
+              <span class="text-base">🖨️</span>
+              <div>
+                <div class="text-xs font-bold text-slate-800">Print Worker Slip</div>
+                <div class="text-[11px] text-slate-500">A4 voucher with signature line</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Rates & Backup Button -->
+        <button type="button" onclick="openRateDrawer('rates')" class="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2 min-h-[38px] rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-2xs transition cursor-pointer" title="Rates & Backup">
+          <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span class="hidden sm:inline">Rates & Backup</span>
+        </button>
+
+        <!-- Instant Lock Screen Button -->
+        <button type="button" onclick="lockWorkspace(true)" class="inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-2 min-h-[38px] rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer" title="Lock Screen Immediately">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 11h14a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2z"/></svg>
+          <span class="hidden md:inline">Lock</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tier 2: Dedicated Period & Date Filter Bar (Works cleanly across Desktop, Tablet & Mobile) -->
+    <div class="bg-slate-50/90 border-t border-slate-200/80">
+      <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 shrink-0 hidden md:inline">Billing Period:</span>
+          <div id="month-pills-bar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"></div>
+        </div>
+        <div class="grid grid-cols-[1fr_auto_1fr] sm:flex items-center gap-1.5 shrink-0">
+          <input type="date" id="filter-from" onchange="handleDateFilter()" class="w-full sm:w-auto bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer" />
+          <span class="text-slate-400 text-xs text-center font-medium px-0.5">to</span>
+          <input type="date" id="filter-to" onchange="handleDateFilter()" class="w-full sm:w-auto bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer" />
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="max-w-7xl w-full mx-auto px-3 sm:px-6 py-5 flex-1 flex flex-col gap-5">
+
+    <!-- WORKER SELECTOR BAR -->
+    <section class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      <div id="worker-tabs" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1"></div>
+      <div class="flex items-center justify-end gap-2 shrink-0">
+        <button type="button" onclick="openAddWorkerModal()" class="inline-flex items-center justify-center gap-1.5 px-3.5 min-h-[40px] rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer">
+          <span>+ Add Worker</span>
+        </button>
+        <button type="button" onclick="openDeleteWorkerModal()" class="inline-flex items-center justify-center gap-1.5 px-3 min-h-[40px] rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer" title="Delete Active Worker">
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          <span>Delete Worker</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 3 SUMMARY KPI CARDS -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- Card 1: Quantity -->
+      <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Packed Weight</span>
+          <span id="kpi-bags" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 tabular-nums">0 Bags</span>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <span id="kpi-kg" class="text-2xl sm:text-3xl font-extrabold text-slate-900 tabular-nums">0 Kg</span>
+          <span id="kpi-mt" class="text-xs font-semibold text-slate-500 tabular-nums">(0.000 MT)</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Work Split -->
+      <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Bill Breakdown</span>
+          <span id="kpi-count" class="text-xs font-semibold text-slate-400 tabular-nums">0 rows</span>
+        </div>
+        <div class="mt-3 space-y-1 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-500 font-medium">Packing & Labour</span>
+            <span id="kpi-packing-amt" class="font-bold text-slate-800 tabular-nums">₹ 0.00</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-500 font-medium">Labour / Lot Bill</span>
+            <span id="kpi-misc-amt" class="font-bold text-slate-800 tabular-nums">₹ 0.00</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-rose-500 font-medium">Less: Advance / Kharchi</span>
+            <span id="kpi-advance-amt" class="font-bold text-rose-600 tabular-nums">- ₹ 0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Net Payable -->
+      <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-5 text-white shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">Net Payable (<span id="kpi-worker-name">Bhgwati</span>)</span>
+          <span id="kpi-factory-total" class="text-[11px] font-medium text-slate-300 tabular-nums">Unit-2 Total: ₹0</span>
+        </div>
+        <div class="mt-3 flex items-baseline justify-between">
+          <span id="kpi-net-total" class="text-2xl sm:text-3xl font-extrabold text-white tabular-nums">₹ 0.00</span>
+          <span id="kpi-gross-sub" class="text-[11px] text-slate-400 tabular-nums">Gross: ₹0</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- QUICK ENTRY CARD -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 sm:p-5">
+      <!-- Entry Type Tabs -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div class="inline-flex flex-wrap p-1 rounded-xl bg-slate-100 border border-slate-200 gap-0.5">
+          <button type="button" id="tab-packing" onclick="switchEntryMode('packing')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-2xs transition cursor-pointer">
+            Packing Entry
+          </button>
+          <button type="button" id="tab-labour" onclick="switchEntryMode('labour')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer">
+            Daily Labour
+          </button>
+          <button type="button" id="tab-lot" onclick="switchEntryMode('lot')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer">
+            Lot Bill
+          </button>
+          <button type="button" id="tab-advance" onclick="switchEntryMode('advance')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-rose-700 transition cursor-pointer">
+            Advance / Kharchi
+          </button>
+        </div>
+
+        <span class="text-xs font-medium text-slate-500">
+          Adding entry to: <strong class="text-slate-900" id="form-worker-label">Bhgwati</strong>
+        </span>
+      </div>
+
+      <!-- FORM A: PACKING ENTRY -->
+      <form id="form-packing" onsubmit="addPackingEntry(event)" class="space-y-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-12 gap-3">
+          <!-- Date -->
+          <div class="col-span-2 sm:col-span-2 lg:col-span-2">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Date</label>
+            <input type="date" id="p-date" required class="w-full px-3 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm font-medium text-slate-800 focus:border-emerald-500 outline-none" />
+          </div>
+
+          <!-- Product Name -->
+          <div class="col-span-2 sm:col-span-2 lg:col-span-3 relative">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Product Name (Any Company)</label>
+            <input type="text" id="p-product" autocomplete="off" oninput="handleProductTyping()" onfocus="handleProductTyping()" placeholder="e.g. Iffco Mg, Zuari Zinc, TG Magnum" required class="w-full px-3 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm font-medium text-slate-800 focus:border-emerald-500 outline-none" />
+            <!-- Smart Company-Stripping Autocomplete Dropdown -->
+            <div id="product-smart-dropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-40 max-h-56 overflow-y-auto divide-y divide-slate-100"></div>
+          </div>
+
+          <!-- Unit -->
+          <div class="col-span-1 sm:col-span-1 lg:col-span-1">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Unit</label>
+            <select id="p-unit" onchange="handleUnitChange()" class="w-full px-2.5 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm font-semibold text-slate-800 focus:border-emerald-500 outline-none cursor-pointer">
+              <option value="1kg">1kg</option>
+              <option value="2kg">2kg</option>
+              <option value="3kg">3kg</option>
+              <option value="4kg">4kg</option>
+              <option value="5kg">5kg</option>
+              <option value="8kg">8kg</option>
+              <option value="10kg">10kg</option>
+              <option value="15kg">15kg</option>
+              <option value="20kg" selected>20kg</option>
+              <option value="25kg">25kg</option>
+              <option value="50kg">50kg</option>
+              <option value="500gm">500gm</option>
+              <option value="250gm">250gm</option>
+              <option value="100gm">100gm</option>
+            </select>
+          </div>
+
+          <!-- Liner Pill Buttons -->
+          <div class="col-span-2 sm:col-span-3 lg:col-span-3">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Packing Liner</label>
+            <div class="grid grid-cols-4 gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200 min-h-[42px]">
+              <button type="button" data-liner="Without Panni" onclick="selectLiner('Without Panni')" class="liner-btn py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-900 shadow-2xs transition cursor-pointer truncate px-1">No Panni</button>
+              <button type="button" data-liner="With Panni" onclick="selectLiner('With Panni')" class="liner-btn py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer truncate px-1">Panni</button>
+              <button type="button" data-liner="Open" onclick="selectLiner('Open')" class="liner-btn py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer truncate px-1">Open</button>
+              <button type="button" data-liner="Bucket" onclick="selectLiner('Bucket')" class="liner-btn py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer truncate px-1">Bucket</button>
+            </div>
+            <input type="hidden" id="p-panni" value="Without Panni" />
+          </div>
+
+          <!-- Pack Size (Kg) -->
+          <div class="col-span-1 sm:col-span-1 lg:col-span-1">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Bag Kg</label>
+            <input type="number" step="0.01" id="p-packsize" value="20" oninput="refreshLivePreview()" required class="w-full px-2.5 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm font-bold tabular-nums text-slate-800 focus:border-emerald-500 outline-none" />
+          </div>
+
+          <!-- No. of Bags -->
+          <div class="col-span-1 sm:col-span-1 lg:col-span-1">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Bags</label>
+            <input type="number" step="1" min="1" id="p-bags" placeholder="0" oninput="refreshLivePreview()" required class="w-full px-2.5 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm font-bold tabular-nums text-slate-800 focus:border-emerald-500 outline-none" />
+          </div>
+
+          <!-- Remark -->
+          <div class="col-span-1 sm:col-span-2 lg:col-span-1">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Remark</label>
+            <input type="text" id="p-remark" placeholder="Optional" class="w-full px-2.5 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm text-slate-800 focus:border-emerald-500 outline-none" />
+          </div>
+        </div>
+
+        <!-- Live Auto-Calculation Bar & Submit -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div class="inline-flex flex-wrap items-center gap-2 sm:gap-3 px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+            <span class="text-slate-500">Weight: <strong id="prev-qty" class="text-slate-900 tabular-nums">0 Kg</strong></span>
+            <span class="text-slate-300">|</span>
+            <span class="text-slate-500 flex items-center gap-1">
+              Rate: <strong id="prev-rate-kg" class="text-slate-900 tabular-nums">₹0.000/Kg</strong>
+              <span class="text-slate-400" id="prev-rate-mt">(₹0/MT)</span>
+              <button type="button" onclick="toggleCustomRateBox()" class="ml-1 p-1 rounded text-slate-400 hover:text-emerald-600 cursor-pointer" title="Override rate for this entry">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+              <input type="number" step="1" id="p-override-rate" oninput="handleCustomRateInput()" placeholder="₹/MT" class="hidden w-20 px-2 py-0.5 rounded-lg border border-emerald-500 bg-white text-xs font-bold tabular-nums text-emerald-800 outline-none" />
+            </span>
+            <span id="prev-slab-badge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800"></span>
+            <span class="text-slate-300">|</span>
+            <span class="text-slate-500">Total: <strong id="prev-amount" class="text-emerald-700 font-extrabold tabular-nums text-sm">₹0.00</strong></span>
+          </div>
+
+          <button type="submit" class="w-full sm:w-auto px-6 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer">
+            + Add Entry
+          </button>
+        </div>
+
+        <!-- Inline Unknown Product Prompt (Quick Add to Rate List OR Continue Without Saving) -->
+        <div id="inline-unknown-product-bar" class="hidden p-3.5 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div class="flex items-start gap-2.5">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-amber-200 text-amber-900 mt-0.5 shrink-0">New Product</span>
+            <div class="text-xs text-slate-700">
+              <strong id="unk-prod-display" class="text-slate-900">Product</strong> (<span id="unk-unit-display">20kg</span> • <span id="unk-panni-display">Without Panni</span>) is not in your Rate List yet.
+              <span class="block text-[11px] text-slate-500 mt-0.5">Save it permanently to your Rate List (with optional After MT slab) or enter a one-time rate.</span>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <input type="number" step="0.01" id="inline-quick-rate" oninput="applyInlineQuickRate()" placeholder="Rate ₹/MT" class="w-24 px-2.5 py-2 rounded-xl border border-amber-300 bg-white text-xs font-bold tabular-nums text-slate-900 outline-none focus:border-emerald-500" />
+            <input type="number" step="0.1" min="0" id="inline-quick-thresh" oninput="refreshLivePreview()" placeholder="After MT" title="Optional: MT threshold for rate change" class="w-20 px-2.5 py-2 rounded-xl border border-amber-300 bg-white text-xs font-semibold tabular-nums text-slate-800 outline-none focus:border-emerald-500" />
+            <input type="number" step="0.01" id="inline-quick-slab" oninput="refreshLivePreview()" placeholder="Slab ₹/MT" title="Optional: Rate after MT threshold" class="w-24 px-2.5 py-2 rounded-xl border border-amber-300 bg-white text-xs font-bold tabular-nums text-amber-900 outline-none focus:border-emerald-500" />
+            <button type="button" onclick="quickSaveProductToRateCard()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs transition cursor-pointer">
+              + Save to Rate List
+            </button>
+            <button type="button" onclick="dismissInlineUnknownProduct()" class="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold transition cursor-pointer">
+              Do Not Add (Use Once)
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- FORM B: LABOUR & LOT BILL -->
+      <form id="form-misc" onsubmit="addMiscEntry(event)" class="hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+          <div class="lg:col-span-2">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Date</label>
+            <input type="date" id="m-date" required class="w-full px-3 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm font-medium text-slate-800 outline-none focus:border-emerald-500" />
+          </div>
+          <div class="lg:col-span-3">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1" id="m-count-label">Number of Persons</label>
+            <input type="number" step="0.5" min="0.5" id="m-count" value="2" required class="w-full px-3 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm font-bold tabular-nums text-slate-800 outline-none focus:border-emerald-500" />
+          </div>
+          <div class="lg:col-span-3">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1" id="m-rate-label">Rate per Person (₹)</label>
+            <input type="number" step="1" id="m-rate" value="300" required class="w-full px-3 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm font-bold tabular-nums text-slate-800 outline-none focus:border-emerald-500" />
+          </div>
+          <div class="lg:col-span-2">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Remark / Grade</label>
+            <input type="text" id="m-remark" placeholder="e.g. 2 person" class="w-full px-3 py-2 min-h-[42px] rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs sm:text-sm text-slate-800 outline-none focus:border-emerald-500" />
+          </div>
+          <div class="lg:col-span-2">
+            <button type="submit" id="m-submit-btn" class="w-full px-4 py-2.5 min-h-[44px] rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer">
+              + Add Labour
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- LEDGER TABLE (DESKTOP) & CARDS (MOBILE) -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden flex-1 flex flex-col">
+      <!-- Ledger Header -->
+      <div class="px-4 sm:px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <h2 class="text-sm font-extrabold text-slate-900" id="ledger-heading">Bhgwati — Ledger</h2>
+          <span id="ledger-period-badge" class="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full"></span>
+        </div>
+
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <div class="relative flex-1 sm:w-56">
+            <input type="text" id="ledger-search" oninput="renderLedger()" placeholder="Search product or remark..." class="w-full pl-8 pr-3 py-2 sm:py-1.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs text-slate-800 focus:border-emerald-500 outline-none" />
+            <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 sm:top-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <button type="button" onclick="openDeleteWorkerBillsModal()" class="shrink-0 inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer" title="Delete bills for this worker">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            <span>Clear Bills</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile Card View -->
+      <div id="mobile-ledger-list" class="sm:hidden divide-y divide-slate-100"></div>
+      <div id="mobile-ledger-footer" class="sm:hidden bg-slate-50 border-t border-slate-200 px-4 py-3.5 flex items-center justify-between text-xs font-bold text-slate-900"></div>
+
+      <!-- Desktop Table View -->
+      <div class="hidden sm:block overflow-x-auto flex-1">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50">
+              <th class="py-3 px-4">Date</th>
+              <th class="py-3 px-4">Product / Work</th>
+              <th class="py-3 px-3">Unit</th>
+              <th class="py-3 px-3">Packing</th>
+              <th class="py-3 px-3 text-right">Bag Kg</th>
+              <th class="py-3 px-3 text-right">No. of Bag</th>
+              <th class="py-3 px-3 text-right">Qty (Kg)</th>
+              <th class="py-3 px-3 text-right">Rate (/Kg)</th>
+              <th class="py-3 px-4 text-right">Total Amount</th>
+              <th class="py-3 px-3">Remark</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="desktop-ledger-tbody" class="divide-y divide-slate-100 text-xs sm:text-sm"></tbody>
+          <tfoot id="desktop-ledger-tfoot" class="bg-slate-50 border-t border-slate-200 text-xs sm:text-sm font-bold text-slate-900"></tfoot>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER WITH COPYRIGHT -->
+  <footer class="bg-white border-t border-slate-200 py-4 px-4 text-center text-xs text-slate-500 mt-auto">
+    <p class="font-medium">Copyright to <span class="font-bold text-slate-800">@Jainitrana</span></p>
+  </footer>
+
+  <!-- SMART EXCEL IMPORT & VERIFICATION MODAL -->
+  <div id="excel-import-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+      <!-- Modal Header -->
+      <div class="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-100 text-indigo-700">Auto-Rate & Worker Parser</span>
+            <h3 class="text-base font-extrabold text-slate-900" id="import-modal-title">Verify Imported Production Sheet</h3>
+          </div>
+          <p class="text-xs text-slate-500 mt-0.5" id="import-modal-subtitle">Review auto-detected workers, quantities, and calculated rates. Edit any mistake before saving.</p>
+        </div>
+        <button type="button" onclick="closeExcelImportModal()" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Summary & Worker Pills Strip -->
+      <div class="px-5 py-3 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+        <div id="import-worker-summary" class="flex items-center gap-1.5 flex-wrap"></div>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-slate-500">Selected Rows: <strong id="import-selected-count" class="text-slate-900 tabular-nums">0</strong></span>
+          <span class="text-slate-300">|</span>
+          <span class="text-slate-500">Total Weight: <strong id="import-total-kg" class="text-slate-900 tabular-nums">0 Kg</strong></span>
+          <span class="text-slate-300">|</span>
+          <span class="text-slate-500">Auto Bill Total: <strong id="import-total-amt" class="text-emerald-700 font-extrabold tabular-nums">₹0.00</strong></span>
+        </div>
+      </div>
+
+      <!-- Editable Verification Table -->
+      <div class="overflow-auto flex-1">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead class="bg-slate-100 sticky top-0 z-10 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+            <tr>
+              <th class="py-2.5 px-3 text-center">
+                <input type="checkbox" id="import-select-all" checked onchange="toggleAllImportRows(this.checked)" class="rounded border-slate-300 cursor-pointer" />
+              </th>
+              <th class="py-2.5 px-3">Worker Name</th>
+              <th class="py-2.5 px-3">Date</th>
+              <th class="py-2.5 px-3">Product / Work</th>
+              <th class="py-2.5 px-2">Unit</th>
+              <th class="py-2.5 px-2">Packing</th>
+              <th class="py-2.5 px-2 text-right">Bag Kg</th>
+              <th class="py-2.5 px-2 text-right">Bags / Cnt</th>
+              <th class="py-2.5 px-2 text-right">Qty (Kg)</th>
+              <th class="py-2.5 px-2 text-right">Auto Rate (₹/MT)</th>
+              <th class="py-2.5 px-3 text-right">Amount (₹)</th>
+              <th class="py-2.5 px-3">Status / Check</th>
+            </tr>
+          </thead>
+          <tbody id="import-preview-tbody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-[11px] text-slate-500">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span>Rows highlighted in amber need a quick check (e.g., unknown product rate or zero quantity).</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="closeExcelImportModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200/70 cursor-pointer">
+            Cancel
+          </button>
+          <button type="button" onclick="confirmAndCommitImport()" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer">
+            ✓ Confirm & Add to Worker Ledgers
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE-OVER DRAWER: PASSWORD-PROTECTED RATE MASTER & BACKUP -->
+  <div id="drawer-backdrop" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs" onclick="closeRateDrawer()"></div>
+  <aside id="rate-drawer" class="fixed inset-y-0 right-0 z-50 w-full max-w-3xl bg-white shadow-2xl border-l border-slate-200 transform translate-x-full transition-transform duration-300 ease-out flex flex-col">
+    
+    <!-- Drawer Header -->
+    <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+      <div>
+        <h3 class="text-base font-extrabold text-slate-900">Rate Master & Device Backup</h3>
+        <p class="text-xs text-slate-500">Company-agnostic rates • 1–8 MT tonnage slabs • Offline backup</p>
+      </div>
+      <button type="button" onclick="closeRateDrawer()" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- Lock Screen -->
+    <div id="drawer-locked" class="flex-1 flex flex-col items-center justify-center p-8 text-center">
+      <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-800 flex items-center justify-center mb-4">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+      </div>
+      <h4 class="text-base font-bold text-slate-900">Admin Password Required</h4>
+      <p class="text-xs text-slate-500 mt-1 max-w-xs">Enter your admin password to edit rate rules, 1–8 MT slabs, or manage backups.</p>
+      
+      <form onsubmit="unlockDrawer(event)" class="mt-5 flex items-center gap-2 w-full max-w-xs">
+        <input type="password" id="drawer-password" placeholder="Enter password" required class="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-emerald-500 outline-none" />
+        <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold cursor-pointer">Unlock</button>
+      </form>
+      <p id="drawer-error" class="hidden text-xs font-semibold text-rose-600 mt-2">Incorrect password. Please try again.</p>
+    </div>
+
+    <!-- Unlocked Drawer Content -->
+    <div id="drawer-unlocked" class="hidden flex-1 flex flex-col overflow-hidden">
+      <div class="px-5 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5">
+          <button type="button" id="dtab-rates" onclick="switchDrawerTab('rates')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-2xs border border-slate-200 cursor-pointer">My Rate List (Custom MT)</button>
+          <button type="button" id="dtab-settings" onclick="switchDrawerTab('settings')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer">Backup & Slab Rules</button>
+        </div>
+        <input type="text" id="drawer-search" oninput="renderDrawerRates()" placeholder="Filter rate rules..." class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs w-44 outline-none focus:border-emerald-500" />
+      </div>
+
+      <!-- Sub-tab 1: Rate Table -->
+      <div id="dpanel-rates" class="flex-1 flex flex-col overflow-hidden">
+        <form onsubmit="addRateRule(event)" class="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-8 gap-2 items-end">
+          <div class="col-span-2">
+            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Product Name</label>
+            <input type="text" id="nr-cat" placeholder="e.g. Mg, Zinc, Micro, Magnum" required class="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs outline-none focus:border-emerald-500" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Unit</label>
+            <select id="nr-unit" class="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs">
+              <option value="1kg">1kg</option><option value="2kg">2kg</option><option value="3kg">3kg</option>
+              <option value="4kg">4kg</option><option value="5kg">5kg</option><option value="8kg">8kg</option>
+              <option value="10kg">10kg</option><option value="15kg">15kg</option><option value="20kg">20kg</option>
+              <option value="25kg">25kg</option><option value="50kg">50kg</option><option value="500gm">500gm</option>
+              <option value="250gm">250gm</option><option value="100gm">100gm</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Packing</label>
+            <select id="nr-panni" class="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs">
+              <option value="Without Panni">Without Panni</option>
+              <option value="With Panni">With Panni</option>
+              <option value="Open">Open</option>
+              <option value="Bucket">Bucket</option>
+              <option value="Carton">Carton</option>
+              <option value="Transfer">Transfer</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Rate ₹/MT</label>
+            <input type="number" step="0.01" id="nr-base" placeholder="355" required class="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs tabular-nums outline-none" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">After MT (Any)</label>
+            <input type="number" step="0.1" min="0" id="nr-thresh" placeholder="e.g. 5 or 12" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs tabular-nums outline-none" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">New ₹/MT</label>
+            <input type="number" step="0.01" id="nr-slab" placeholder="Optional" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs tabular-nums outline-none" />
+          </div>
+          <div>
+            <button type="submit" class="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer">+ Add</button>
+          </div>
+        </form>
+
+        <div class="overflow-y-auto flex-1">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead class="bg-slate-50 sticky top-0 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+              <tr>
+                <th class="py-2.5 px-4">Product Name</th>
+                <th class="py-2.5 px-2">Unit</th>
+                <th class="py-2.5 px-2">Packing</th>
+                <th class="py-2.5 px-2">Base ₹/MT</th>
+                <th class="py-2.5 px-2">After MT (Any)</th>
+                <th class="py-2.5 px-2">New ₹/MT</th>
+                <th class="py-2.5 px-3 text-right"></th>
+              </tr>
+            </thead>
+            <tbody id="drawer-rates-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Sub-tab 2: Backup & Slab Settings -->
+      <div id="dpanel-settings" class="hidden p-6 space-y-6 overflow-y-auto">
+        <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-1.5">
+          <h4 class="text-xs font-extrabold uppercase tracking-wider text-emerald-800">Offline Storage Protection</h4>
+          <p class="text-xs text-slate-700 leading-relaxed" id="drawer-storage-info">
+            All historical records are saved in your browser's offline database (IndexedDB + LocalStorage). Refreshing or closing the browser will never delete your old months.
+          </p>
+        </div>
+
+        <div class="space-y-2.5">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Download & Restore Safety Backup (.JSON)</h4>
+          <p class="text-xs text-slate-500">Save a backup file to share between mobile and PC or store in Google Drive.</p>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <button type="button" onclick="downloadJSONBackup()" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer">
+              ⬇ Download Backup (.json)
+            </button>
+            <label class="px-4 py-2.5 inline-flex items-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer">
+              ⬆ Restore Backup (.json)
+              <input type="file" accept=".json" onchange="restoreJSONBackup(event)" class="hidden" />
+            </label>
+            <button type="button" onclick="resetDemoData()" class="px-3.5 py-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold cursor-pointer">
+              Reset Demo Data
+            </button>
+          </div>
+        </div>
+
+        <hr class="border-slate-100" />
+
+        <div class="space-y-3">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Full-Volume MT Tonnage Threshold Rules</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Tonnage Count Scope</label>
+              <select id="set-slab-scope" onchange="updateSlabSettings()" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-white">
+                <option value="worker">Per Worker (Individual Tonnage)</option>
+                <option value="factory">Whole Unit-2 Factory Combined</option>
+              </select>
+            </div>
+            <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+              <strong>Full-Quantity Upgrade Active:</strong> Once cumulative tonnage crosses your <em>After MT</em> threshold (e.g. 7 MT &gt; 6 MT), <strong>100% of all entries</strong> for that product automatically upgrade to the higher slab rate (no split billing).
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-slate-100" />
+
+        <div class="space-y-3">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Security & Auto-Lock Protection</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Auto-Lock When Idle</label>
+              <select id="set-autolock" onchange="updateSecuritySettings()" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-white">
+                <option value="0">Disabled (Manual Lock Only)</option>
+                <option value="2">After 2 Minutes Inactive</option>
+                <option value="5">After 5 Minutes Inactive</option>
+                <option value="15">After 15 Minutes Inactive</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Lock on Page Reload / Open</label>
+              <select id="set-lock-on-load" onchange="updateSecuritySettings()" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium bg-white">
+                <option value="yes">Always Require Password on Open (Recommended)</option>
+                <option value="no">Remember Until Tab Closed</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 max-w-sm pt-1">
+            <input type="text" id="set-new-password" placeholder="Set new password" class="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-emerald-500" />
+            <button type="button" onclick="updateAdminPassword()" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- DELETE WORKER BILLS MODAL (PASSWORD PROTECTED) -->
+  <div id="delete-bills-modal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm p-6">
+      <h3 class="text-base font-extrabold text-slate-900">Clear Worker Bills</h3>
+      <p class="text-xs text-slate-500 mt-1">Delete bills for <strong class="text-slate-900" id="del-worker-name">Bhgwati</strong>. This cannot be undone.</p>
+      <form onsubmit="confirmDeleteWorkerBills(event)" class="mt-4 space-y-3">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">Which Bills to Delete?</label>
+          <select id="del-bills-scope" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white">
+            <option value="filtered">Only Selected Date Range</option>
+            <option value="all">All Bills of This Worker (All Months)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">Admin Password</label>
+          <input type="password" id="del-bills-password" placeholder="Enter password to confirm" required class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-rose-500" />
+        </div>
+        <p id="del-bills-error" class="hidden text-xs font-semibold text-rose-600">Incorrect password.</p>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeDeleteWorkerBillsModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer">Delete Bills</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- EDIT ENTRY MODAL -->
+  <div id="edit-modal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6">
+      <h3 class="text-base font-extrabold text-slate-900">Edit Entry</h3>
+      <form onsubmit="saveEditedEntry(event)" class="mt-4 space-y-3">
+        <input type="hidden" id="edit-id" />
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Date</label>
+            <input type="date" id="edit-date" required class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Product / Work</label>
+            <input type="text" id="edit-product" required class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium" />
+          </div>
+        </div>
+
+        <div id="edit-packing-group" class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Packing</label>
+            <select id="edit-panni" class="w-full px-2.5 py-2 rounded-xl border border-slate-200 text-xs bg-white">
+              <option value="Without Panni">Without Panni</option>
+              <option value="With Panni">With Panni</option>
+              <option value="Open">Open</option>
+              <option value="Bucket">Bucket</option>
+              <option value="Carton">Carton</option>
+              <option value="Transfer">Transfer</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Bag Kg</label>
+            <input type="number" step="0.01" id="edit-packsize" class="w-full px-2.5 py-2 rounded-xl border border-slate-200 text-xs tabular-nums" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Bags</label>
+            <input type="number" step="1" id="edit-bags" class="w-full px-2.5 py-2 rounded-xl border border-slate-200 text-xs tabular-nums" />
+          </div>
+        </div>
+
+        <div id="edit-misc-group" class="hidden grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Persons / Lots</label>
+            <input type="number" step="0.5" id="edit-count" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs tabular-nums" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">Rate (₹)</label>
+            <input type="number" step="1" id="edit-rate" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs tabular-nums" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">Remark</label>
+          <input type="text" id="edit-remark" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs" />
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3">
+          <button type="button" onclick="closeEditModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ADD WORKER MODAL -->
+  <div id="worker-modal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm p-6">
+      <h3 class="text-base font-extrabold text-slate-900">Add New Worker</h3>
+      <p class="text-xs text-slate-500 mt-1">Creates a dedicated worker tab and includes them in Excel exports.</p>
+      <form onsubmit="addWorker(event)" class="mt-4 space-y-4">
+        <input type="text" id="new-worker-input" placeholder="e.g. Ramesh Kumar" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:border-emerald-500 outline-none" />
+        <div class="flex justify-end gap-2">
+          <button type="button" onclick="closeAddWorkerModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer">Add Worker</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DELETE WORKER MODAL (PASSWORD PROTECTED) -->
+  <div id="delete-worker-modal" class="hidden fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm p-6">
+      <h3 class="text-base font-extrabold text-slate-900">Delete Worker</h3>
+      <p class="text-xs text-slate-500 mt-1">Remove <strong class="text-slate-900" id="delete-worker-target">Bhgwati</strong> and all of their saved bill entries permanently?</p>
+      <form onsubmit="confirmDeleteWorker(event)" class="mt-4 space-y-3">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 mb-1">Admin Password</label>
+          <input type="password" id="delete-worker-password" placeholder="Enter password to confirm" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:border-rose-500 outline-none" />
+        </div>
+        <p id="delete-worker-error" class="hidden text-xs font-semibold text-rose-600">Incorrect password.</p>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeDeleteWorkerModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer">Delete Worker</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- COMPANY & PRODUCT PRODUCTION SUMMARY MODAL -->
+  <div id="summary-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div>
+          <h3 class="text-base font-extrabold text-slate-900">Company & Product Production Summary</h3>
+          <p class="text-xs text-slate-500 mt-0.5" id="summary-period-label">Unit-2 Production Breakdown</p>
+        </div>
+        <button type="button" onclick="closeProductionSummaryModal()" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="overflow-y-auto p-5 space-y-6 flex-1" id="summary-modal-body"></div>
+      <div class="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeProductionSummaryModal()" class="px-5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- A4 PRINT / PDF WORKER PAYMENT VOUCHER MODAL -->
+  <div id="print-voucher-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-slate-50">
+        <h3 class="text-sm font-extrabold text-slate-900">Packing Payment Slip Preview</h3>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" onclick="triggerVoucherPrint()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs cursor-pointer">
+            🖨️ Print / Save PDF
+          </button>
+          <button type="button" onclick="closePrintVoucherModal()" class="px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 cursor-pointer">
+            Close
+          </button>
+        </div>
+      </div>
+      <div class="overflow-y-auto p-6 sm:p-8 flex-1 bg-white" id="print-voucher-content"></div>
+    </div>
+  </div>
+
+  <!-- DEDICATED TOP-LEVEL A4 PRINT TARGET (VISIBLE ONLY DURING PRINT / SAVE PDF) -->
+  <div id="print-voucher-area" class="hidden"></div>
+
+  <script>
+    /*************************************************************************
+     * 1. USER-MANAGED RATE LIST & PRE-LOADED WORKERS
+     *************************************************************************/
+    // Starts empty so user defines their own clean rates (saved permanently & exported in .json backups)
+    const DEFAULT_RATE_RULES = [];
+
+    const DEFAULT_WORKERS = [
+      'Bhgwati',
+      'SHEELA',
+      'Pradeep/Chandna',
+      'Sagar (Mithilesh)',
+      'SUNITA',
+      'Sanju',
+      'Bharat Raj'
+    ];
+
+    const DEFAULT_ENTRIES = [
+      { id: 'e-101', worker: 'Bhgwati', type: 'packing', date: '2026-10-16', product: 'Iffco Mg', unit: '1kg', panni: 'Without Panni', packSize: 20, bags: 52, remark: '', manualRateMT: 355 },
+      { id: 'e-102', worker: 'Bhgwati', type: 'packing', date: '2026-10-18', product: 'Zuari Zinc 21%', unit: '5kg', panni: 'Without Panni', packSize: 25, bags: 30, remark: '', manualRateMT: 205 },
+      { id: 'e-103', worker: 'Bhgwati', type: 'packing', date: '2026-10-18', product: 'Spic Micro', unit: '5kg', panni: 'With Panni', packSize: 25, bags: 72, remark: '', manualRateMT: 275 },
+      { id: 'e-104', worker: 'Bhgwati', type: 'packing', date: '2026-10-20', product: 'TG Magnum', unit: '1kg', panni: 'Without Panni', packSize: 20, bags: 10, remark: 'Magnum', manualRateMT: 320 },
+      { id: 'e-105', worker: 'Bhgwati', type: 'packing', date: '2026-10-22', product: 'TG Magnum', unit: '1kg', panni: 'Open', packSize: 20, bags: 56, remark: 'Open', manualRateMT: 280 },
+      { id: 'e-108', worker: 'Bhgwati', type: 'labour', date: '2026-10-26', product: 'Labour', count: 2, rate: 300, remark: '2 person' }
+    ];
+
+    /*************************************************************************
+     * 2. CRYPTOGRAPHIC SECURITY (SHA-256 + AES-GCM) & DUAL PERSISTENCE
+     *************************************************************************/
+    const STORAGE_KEY = 'unit2_packing_bill_v4';
+    const IDB_NAME = 'Unit2PackingDB_v4';
+    const IDB_STORE = 'stateStore';
+    // SHA-256 hash of default password (plain-text password is never stored in HTML source)
+    const DEFAULT_PASSWORD_HASH = '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9';
+
+    let sessionPassword = null;
+    let isSessionAuthenticated = false;
+    let dismissedUnknownKey = '';
+
+    let appState = {
+      passwordHash: DEFAULT_PASSWORD_HASH,
+      workers: [...DEFAULT_WORKERS],
+      rateRules: [],
+      entries: JSON.parse(JSON.stringify(DEFAULT_ENTRIES)),
+      activeWorker: 'Bhgwati',
+      filterFrom: '2026-10-01',
+      filterTo: '2026-10-31',
+      slabScope: 'worker',
+      slabMode: 'retroactive',
+      autoLockMinutes: 5,
+      lockOnLoad: true,
+      updatedAt: 0
+    };
+
+    let currentEntryMode = 'packing';
+    let overrideRateMT = null;
+    let isDrawerUnlocked = false;
+    let pendingDrawerTab = 'rates';
+    let idleTimer = null;
+    let stagedImportRows = [];
+
+    /**
+     * Dynamically separates any 1, 2, or 3+ word company prefix (e.g., "SRI RAM", "IFFCO", "ZUARI")
+     * from the core product keyword defined in the user's Rate List.
+     */
+    function extractCompanyAndProduct(rawText) {
+      const text = String(rawText || '').trim().replace(/\s+/g, ' ');
+      if (!text) return { companyPrefix: '', coreProduct: '', matchedRule: null };
+
+      const lowerText = text.toLowerCase();
+      const rules = Array.isArray(appState.rateRules) ? appState.rateRules : [];
+
+      // Sort rules by category length descending so more specific names match first
+      const sortedRules = [...rules].sort((a, b) => (b.category || '').length - (a.category || '').length);
+
+      for (const rule of sortedRules) {
+        const cat = (rule.category || '').trim();
+        if (!cat) continue;
+        const catLower = cat.toLowerCase();
+
+        // Check if text ends with or contains the product keyword at a word boundary
+        const escaped = catLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(?:^|\\s)(${escaped})(?:\\s|$|\\.|,)`, 'i');
+        const match = text.match(regex);
+        if (match && match.index !== undefined) {
+          const prefix = text.slice(0, match.index).trim();
+          const rest = text.slice(match.index).trim();
+          return { companyPrefix: prefix, coreProduct: rest || cat, matchedRule: rule };
+        }
+      }
+
+      // If no saved rule matched yet, check if the user typed multiple words (e.g. "SRI RAM MG")
+      // Treat the last token (or last 2 tokens if trailing unit/grade like "21%") as the product candidate
+      const words = text.split(' ');
+      if (words.length >= 2) {
+        const lastWord = words[words.length - 1];
+        const prevWord = words[words.length - 2];
+        if (/^(\d+%|\d+(kg|gm))$/i.test(lastWord) && words.length >= 3) {
+          return {
+            companyPrefix: words.slice(0, -2).join(' '),
+            coreProduct: `${prevWord} ${lastWord}`,
+            matchedRule: null
+          };
+        }
+        return {
+          companyPrefix: words.slice(0, -1).join(' '),
+          coreProduct: lastWord,
+          matchedRule: null
+        };
+      }
+
+      return { companyPrefix: '', coreProduct: text, matchedRule: null };
+    }
+
+    function stripCompanyPrefix(rawText) {
+      return extractCompanyAndProduct(rawText).coreProduct;
+    }
+
+    async function hashPassword(plainText) {
+      if (window.crypto && window.crypto.subtle) {
+        const data = new TextEncoder().encode(plainText);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        return Array.from(new Uint8Array(hashBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+      }
+      // Fallback hash when opened directly via file:// without HTTPS
+      let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+      for (let i = 0; i < plainText.length; i++) {
+        const ch = plainText.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+      h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+      h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+      return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+    }
+
+    async function deriveAESKey(password, salt) {
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(password),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+      );
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+      );
+    }
+
+    async function encryptStatePayload(stateObj, password) {
+      if (!window.crypto || !window.crypto.subtle) {
+        // Fallback obfuscation when opened via file://
+        const raw = JSON.stringify(stateObj);
+        let xor = '';
+        for (let i = 0; i < raw.length; i++) {
+          xor += String.fromCharCode(raw.charCodeAt(i) ^ password.charCodeAt(i % password.length));
+        }
+        return {
+          encrypted: true,
+          fallback: true,
+          passwordHash: stateObj.passwordHash,
+          updatedAt: stateObj.updatedAt,
+          cipher: btoa(unescape(encodeURIComponent(xor)))
+        };
+      }
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const key = await deriveAESKey(password, salt);
+      const encoded = new TextEncoder().encode(JSON.stringify(stateObj));
+      const cipherBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+
+      const toB64 = (arr) => btoa(String.fromCharCode(...new Uint8Array(arr)));
+      return {
+        encrypted: true,
+        passwordHash: stateObj.passwordHash,
+        updatedAt: stateObj.updatedAt,
+        salt: toB64(salt),
+        iv: toB64(iv),
+        cipher: toB64(cipherBuf)
+      };
+    }
+
+    async function decryptStatePayload(envelope, password) {
+      if (!envelope || !envelope.encrypted) return envelope;
+      if (envelope.fallback) {
+        const xor = decodeURIComponent(escape(atob(envelope.cipher)));
+        let raw = '';
+        for (let i = 0; i < xor.length; i++) {
+          raw += String.fromCharCode(xor.charCodeAt(i) ^ password.charCodeAt(i % password.length));
+        }
+        return JSON.parse(raw);
+      }
+      const fromB64 = (str) => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+      const salt = fromB64(envelope.salt);
+      const iv = fromB64(envelope.iv);
+      const cipher = fromB64(envelope.cipher);
+      const key = await deriveAESKey(password, salt);
+      const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
+      return JSON.parse(new TextDecoder().decode(plainBuf));
+    }
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) return reject(new Error('IndexedDB unsupported'));
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE);
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function loadFromIDB() {
+      try {
+        const db = await openDB();
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, 'readonly');
+          const req = tx.objectStore(IDB_STORE).get('main');
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => reject(req.error);
+        });
+      } catch (err) {
+        return null;
+      }
+    }
+
+    async function saveToIDB(data) {
+      try {
+        const db = await openDB();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          const req = tx.objectStore(IDB_STORE).put(data, 'main');
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+        });
+      } catch (err) {
+        // Fallback handled via localStorage
+      }
+    }
+
+    async function getLatestStoredEnvelope() {
+      const idbEnv = await loadFromIDB();
+      const rawLS = localStorage.getItem(STORAGE_KEY);
+      const lsEnv = rawLS ? JSON.parse(rawLS) : null;
+
+      if (idbEnv && lsEnv) {
+        return (lsEnv.updatedAt || 0) >= (idbEnv.updatedAt || 0) ? lsEnv : idbEnv;
+      }
+      return idbEnv || lsEnv || null;
+    }
+
+    async function persistAppState() {
+      appState.updatedAt = Date.now();
+      const payloadToStore = sessionPassword
+        ? await encryptStatePayload(appState, sessionPassword)
+        : appState;
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payloadToStore));
+      } catch (err) {
+        console.warn('LocalStorage full, saving to IndexedDB');
+      }
+      await saveToIDB(payloadToStore);
+      updateStorageBadge();
+    }
+
+    function updateStorageBadge() {
+      const count = appState.entries.length;
+      const badge = document.getElementById('storage-badge-text');
+      const sub = document.getElementById('storage-subtext');
+      const info = document.getElementById('drawer-storage-info');
+
+      if (badge) badge.textContent = `Saved • ${count} Rows`;
+      if (sub) sub.textContent = `Offline Auto-Save Active • ${count} Records across ${appState.workers.length} Workers`;
+      if (info) {
+        info.innerHTML = `<strong>${count} entries</strong> across <strong>${appState.workers.length} workers</strong> and <strong>${appState.rateRules.length} rate rules</strong> are stored offline on this device. Refreshing or closing the browser will never delete old months.`;
+      }
+    }
+
+    /*************************************************************************
+     * 2B. AUTHENTICATION, SCREEN LOCK & IDLE AUTO-LOCK
+     *************************************************************************/
+    async function bootApp() {
+      try {
+        const envelope = await getLatestStoredEnvelope();
+        if (envelope) {
+          if (envelope.passwordHash) {
+            appState.passwordHash = envelope.passwordHash;
+          }
+          if (!envelope.encrypted) {
+            appState = { ...appState, ...envelope };
+          }
+        }
+
+        const cachedSessionPwd = sessionStorage.getItem('u2_tab_pwd');
+        if (cachedSessionPwd) {
+          const h = await hashPassword(cachedSessionPwd);
+          if (h === appState.passwordHash) {
+            sessionPassword = cachedSessionPwd;
+            if (envelope && envelope.encrypted) {
+              const decrypted = await decryptStatePayload(envelope, cachedSessionPwd);
+              appState = { ...appState, ...decrypted };
+            }
+            if (appState.lockOnLoad === false) {
+              completeUnlockUI();
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Boot check:', err);
+      }
+
+      const overlay = document.getElementById('screen-lock-overlay');
+      if (overlay) overlay.classList.remove('hidden');
+      const pwdInput = document.getElementById('screen-lock-password');
+      if (pwdInput) pwdInput.focus();
+    }
+
+    async function unlockScreenLock(e) {
+      e.preventDefault();
+      const inputEl = document.getElementById('screen-lock-password');
+      const errEl = document.getElementById('screen-lock-error');
+      const btnEl = document.getElementById('screen-lock-btn');
+      const entered = inputEl.value;
+      if (!entered) return;
+
+      btnEl.textContent = 'Decrypting...';
+      btnEl.disabled = true;
+
+      try {
+        const envelope = await getLatestStoredEnvelope();
+        const targetHash = (envelope && envelope.passwordHash) ? envelope.passwordHash : appState.passwordHash;
+        const enteredHash = await hashPassword(entered);
+
+        if (enteredHash !== targetHash) {
+          errEl.classList.remove('hidden');
+          inputEl.value = '';
+          inputEl.focus();
+          btnEl.textContent = 'Unlock Workspace';
+          btnEl.disabled = false;
+          return;
+        }
+
+        sessionPassword = entered;
+        if (envelope) {
+          const loaded = envelope.encrypted
+            ? await decryptStatePayload(envelope, entered)
+            : envelope;
+          appState = { ...appState, ...loaded, passwordHash: targetHash };
+        }
+
+        if (appState.lockOnLoad === false) {
+          sessionStorage.setItem('u2_tab_pwd', entered);
+        } else {
+          sessionStorage.removeItem('u2_tab_pwd');
+        }
+
+        errEl.classList.add('hidden');
+        inputEl.value = '';
+        completeUnlockUI();
+        await persistAppState();
+      } catch (err) {
+        console.error(err);
+        errEl.textContent = 'Could not decrypt saved data. Check password.';
+        errEl.classList.remove('hidden');
+      } finally {
+        btnEl.textContent = 'Unlock Workspace';
+        btnEl.disabled = false;
+      }
+    }
+
+    function completeUnlockUI() {
+      isSessionAuthenticated = true;
+      document.getElementById('screen-lock-overlay').classList.add('hidden');
+      if (!appState.workers || appState.workers.length === 0) {
+        appState.workers = [...DEFAULT_WORKERS];
+      }
+      if (!appState.workers.includes(appState.activeWorker)) {
+        appState.activeWorker = appState.workers[0];
+      }
+      syncDates();
+      renderDashboard();
+      resetIdleTimer();
+    }
+
+    function lockWorkspace(manual = false) {
+      isSessionAuthenticated = false;
+      isDrawerUnlocked = false;
+      sessionPassword = null;
+      sessionStorage.removeItem('u2_tab_pwd');
+      closeRateDrawer();
+      document.getElementById('screen-lock-password').value = '';
+      document.getElementById('screen-lock-error').classList.add('hidden');
+      document.getElementById('screen-lock-overlay').classList.remove('hidden');
+      setTimeout(() => document.getElementById('screen-lock-password').focus(), 60);
+      if (manual) showToast('Workspace locked');
+    }
+
+    function resetIdleTimer() {
+      if (idleTimer) clearTimeout(idleTimer);
+      const mins = Number(appState.autoLockMinutes);
+      if (!isSessionAuthenticated || !mins || mins <= 0) return;
+      idleTimer = setTimeout(() => {
+        lockWorkspace(false);
+      }, mins * 60 * 1000);
+    }
+
+    ['mousemove', 'keydown', 'click', 'touchstart'].forEach(evt => {
+      document.addEventListener(evt, () => {
+        if (isSessionAuthenticated) resetIdleTimer();
+      }, { passive: true });
+    });
+
+    /*************************************************************************
+     * 3. SMART PRODUCT MATCHING & UNLIMITED MT TONNAGE ENGINE
+     *************************************************************************/
+    function findRateRule(productName, unit, panni) {
+      const rawText = String(productName || '').trim().toLowerCase();
+      if (!rawText) return null;
+
+      const { coreProduct } = extractCompanyAndProduct(productName);
+      const stripped = (coreProduct || rawText).toLowerCase().trim();
+
+      let normUnit = (unit || '').toLowerCase().replace(/\s+/g, '').trim();
+      if (/^\d+(\.\d+)?$/.test(normUnit)) normUnit = `${normUnit}kg`;
+      const normPanni = (panni || '').trim();
+
+      const rules = Array.isArray(appState.rateRules) ? appState.rateRules : [];
+      if (rules.length === 0) return null;
+
+      const matchesProduct = (r) => {
+        const cat = (r.category || '').toLowerCase().trim();
+        if (!cat) return false;
+        const kws = (r.keywords && r.keywords.length ? r.keywords : [cat]);
+        return kws.some(k => {
+          const kl = k.toLowerCase().trim();
+          return stripped === kl || stripped.includes(kl) || kl.includes(stripped) || rawText.includes(kl);
+        });
+      };
+
+      // 1. Exact product name + exact unit + exact panni
+      const exactFull = rules.find(r =>
+        (r.category || '').toLowerCase().trim() === stripped &&
+        r.unit === normUnit &&
+        r.panni === normPanni
+      );
+      if (exactFull) return exactFull;
+
+      // 2. Keyword / partial product match + exact unit + exact panni
+      const kwUnitPanni = rules.find(r => matchesProduct(r) && r.unit === normUnit && r.panni === normPanni);
+      if (kwUnitPanni) return kwUnitPanni;
+
+      // 3. Product match + exact unit (any panni)
+      const kwUnitOnly = rules.find(r => matchesProduct(r) && r.unit === normUnit);
+      return kwUnitOnly || null;
+    }
+
+    function computeFilteredLedger(fromDate, toDate) {
+      const filtered = appState.entries
+        .filter(e => (!fromDate || e.date >= fromDate) && (!toDate || e.date <= toDate))
+        .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+
+      // Sum total cumulative MT per worker (or factory) + matched product rule across the entire period
+      const totalMTMap = {};
+      filtered.forEach(entry => {
+        if (entry.type !== 'packing') return;
+        const mt = ((Number(entry.packSize) || 0) * (Number(entry.bags) || 0)) / 1000;
+        const rule = findRateRule(entry.product, entry.unit, entry.panni);
+        const scope = appState.slabScope === 'factory' ? 'ALL' : entry.worker;
+        const key = `${scope}::${rule ? rule.id : entry.unit + '_' + entry.panni}`;
+        totalMTMap[key] = (totalMTMap[key] || 0) + mt;
+      });
+
+      return filtered.map(entry => {
+        if (entry.type !== 'packing') {
+          const amt = (Number(entry.count) || 0) * (Number(entry.rate) || 0);
+          return {
+            ...entry,
+            qtyKg: 0,
+            qtyMT: 0,
+            appliedRateMT: Number(entry.rate) || 0,
+            appliedRateKg: Number(entry.rate) || 0,
+            totalAmount: amt,
+            slabApplied: false,
+            slabNote: '',
+            matchedRule: null
+          };
+        }
+
+        const qtyKg = (Number(entry.packSize) || 0) * (Number(entry.bags) || 0);
+        const qtyMT = qtyKg / 1000;
+        const rule = findRateRule(entry.product, entry.unit, entry.panni);
+
+        const scope = appState.slabScope === 'factory' ? 'ALL' : entry.worker;
+        const key = `${scope}::${rule ? rule.id : entry.unit + '_' + entry.panni}`;
+        const periodTotalMT = totalMTMap[key] || 0;
+
+        let appliedRateMT = entry.manualRateMT != null ? Number(entry.manualRateMT) : (rule ? Number(rule.baseRate) : 0);
+        let slabApplied = false;
+        let slabNote = '';
+
+        // Full-Quantity Retroactive Upgrade: If cumulative tonnage exceeds threshold (e.g. 7 MT > 6 MT),
+        // 100% of every row for that product/worker gets the higher slabRate uniformly (NO splitting).
+        if (entry.manualRateMT == null && rule && rule.thresholdMT > 0 && rule.slabRate > 0) {
+          const thresh = Number(rule.thresholdMT);
+          if (periodTotalMT > thresh) {
+            appliedRateMT = Number(rule.slabRate);
+            slabApplied = true;
+            slabNote = `>${thresh} MT Full Rate (₹${appliedRateMT}/MT)`;
+          }
+        }
+
+        const totalAmount = qtyMT * appliedRateMT;
+
+        return {
+          ...entry,
+          qtyKg,
+          qtyMT,
+          appliedRateMT,
+          appliedRateKg: appliedRateMT / 1000,
+          totalAmount,
+          slabApplied,
+          slabNote,
+          matchedRule: rule
+        };
+      });
+    }
+
+    /*************************************************************************
+     * 4. UI RENDERING, FILTERS, WORKER TABS & FORM CONTROLS
+     *************************************************************************/
+    function syncDates() {
+      document.getElementById('filter-from').value = appState.filterFrom;
+      document.getElementById('filter-to').value = appState.filterTo;
+
+      const entryDate = appState.filterTo || new Date().toISOString().slice(0, 10);
+      document.getElementById('p-date').value = entryDate;
+      document.getElementById('m-date').value = entryDate;
+    }
+
+    function renderMonthPills() {
+      const monthSet = new Set();
+      appState.entries.forEach(e => {
+        if (e.date && e.date.length >= 7) monthSet.add(e.date.slice(0, 7));
+      });
+      const currentYM = new Date().toISOString().slice(0, 7);
+      monthSet.add(currentYM);
+
+      const sortedMonths = Array.from(monthSet).sort().reverse();
+      const activeYM = (appState.filterFrom && appState.filterTo && appState.filterFrom.slice(0, 7) === appState.filterTo.slice(0, 7))
+        ? appState.filterFrom.slice(0, 7)
+        : (!appState.filterFrom && !appState.filterTo ? 'ALL' : 'CUSTOM');
+
+      const bar = document.getElementById('month-pills-bar');
+      if (!bar) return;
+
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      let html = `
+        <button type="button" onclick="selectQuickMonth('ALL')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+          activeYM === 'ALL'
+            ? 'bg-slate-900 text-white shadow-2xs'
+            : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+        }">All Time</button>
+      `;
+
+      sortedMonths.forEach(ym => {
+        const [y, m] = ym.split('-');
+        const label = `${monthNames[Number(m) - 1]} ${y}`;
+        const isSelected = activeYM === ym;
+        html += `
+          <button type="button" onclick="selectQuickMonth('${ym}')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${
+            isSelected
+              ? 'bg-emerald-600 text-white shadow-2xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }">${label}</button>
+        `;
+      });
+
+      bar.innerHTML = html;
+    }
+
+    function selectQuickMonth(ym) {
+      if (ym === 'ALL') {
+        appState.filterFrom = '';
+        appState.filterTo = '';
+      } else {
+        const [y, m] = ym.split('-');
+        const lastDay = new Date(Number(y), Number(m), 0).getDate();
+        appState.filterFrom = `${y}-${m}-01`;
+        appState.filterTo = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+      }
+      syncDates();
+      persistAppState();
+      renderDashboard();
+    }
+
+    function handleDateFilter() {
+      appState.filterFrom = document.getElementById('filter-from').value;
+      appState.filterTo = document.getElementById('filter-to').value;
+      persistAppState();
+      renderDashboard();
+    }
+
+    function selectWorker(name) {
+      appState.activeWorker = name;
+      persistAppState();
+      renderDashboard();
+    }
+
+    function renderWorkerTabs() {
+      const container = document.getElementById('worker-tabs');
+      if (!container) return;
+
+      const filtered = computeFilteredLedger(appState.filterFrom, appState.filterTo);
+      const countByWorker = {};
+      filtered.forEach(e => {
+        countByWorker[e.worker] = (countByWorker[e.worker] || 0) + 1;
+      });
+
+      container.innerHTML = appState.workers.map(w => {
+        const isActive = w === appState.activeWorker;
+        const cnt = countByWorker[w] || 0;
+        return `
+          <button type="button" onclick="selectWorker('${w.replace(/'/g, "\\'")}')" class="inline-flex items-center gap-2 px-3.5 py-2 min-h-[40px] rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
+            isActive
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+          }">
+            <span>${w}</span>
+            <span class="px-1.5 py-0.5 rounded-full text-[10px] tabular-nums ${
+              isActive ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600'
+            }">${cnt}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function switchEntryMode(mode) {
+      currentEntryMode = mode;
+      const pForm = document.getElementById('form-packing');
+      const mForm = document.getElementById('form-misc');
+      const tabs = {
+        packing: document.getElementById('tab-packing'),
+        labour: document.getElementById('tab-labour'),
+        lot: document.getElementById('tab-lot'),
+        advance: document.getElementById('tab-advance')
+      };
+
+      Object.entries(tabs).forEach(([key, btn]) => {
+        if (!btn) return;
+        btn.className = key === mode
+          ? 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-2xs transition cursor-pointer'
+          : 'px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer';
+      });
+
+      if (mode === 'packing') {
+        pForm.classList.remove('hidden');
+        mForm.classList.add('hidden');
+      } else {
+        pForm.classList.add('hidden');
+        mForm.classList.remove('hidden');
+        if (mode === 'advance') {
+          document.getElementById('m-count-label').textContent = 'Times / Count';
+          document.getElementById('m-rate-label').textContent = 'Advance / Kharchi Amount (₹)';
+          document.getElementById('m-count').value = 1;
+          document.getElementById('m-rate').value = 500;
+          document.getElementById('m-remark').placeholder = 'e.g. Cash Kharchi / Advance';
+          document.getElementById('m-submit-btn').textContent = '+ Deduct Advance';
+        } else {
+          const isLot = mode === 'lot';
+          document.getElementById('m-count-label').textContent = isLot ? 'Number of Lots' : 'Number of Persons';
+          document.getElementById('m-rate-label').textContent = isLot ? 'Rate per Lot (₹)' : 'Rate per Person (₹)';
+          document.getElementById('m-count').value = 2;
+          document.getElementById('m-rate').value = isLot ? 85 : 300;
+          document.getElementById('m-remark').placeholder = isLot ? 'e.g. Grade 0.06' : 'e.g. 2 person';
+          document.getElementById('m-submit-btn').textContent = isLot ? '+ Add Lot Bill' : '+ Add Labour';
+        }
+      }
+    }
+
+    function selectLiner(liner) {
+      document.getElementById('p-panni').value = liner;
+      document.querySelectorAll('.liner-btn').forEach(btn => {
+        const isSelected = btn.getAttribute('data-liner') === liner;
+        btn.className = isSelected
+          ? 'liner-btn py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-900 shadow-2xs transition cursor-pointer truncate px-1'
+          : 'liner-btn py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:text-slate-900 transition cursor-pointer truncate px-1';
+      });
+      refreshLivePreview();
+    }
+
+    function handleUnitChange() {
+      const unit = document.getElementById('p-unit').value;
+      const num = parseFloat(unit);
+      if (!isNaN(num) && num > 0) {
+        const kgVal = unit.endsWith('gm') ? num / 1000 : num;
+        document.getElementById('p-packsize').value = kgVal;
+      }
+      refreshLivePreview();
+    }
+
+    function toggleCustomRateBox() {
+      const box = document.getElementById('p-override-rate');
+      box.classList.toggle('hidden');
+      if (!box.classList.contains('hidden')) {
+        box.focus();
+      } else {
+        box.value = '';
+        overrideRateMT = null;
+        refreshLivePreview();
+      }
+    }
+
+    function handleCustomRateInput() {
+      const val = parseFloat(document.getElementById('p-override-rate').value);
+      overrideRateMT = isNaN(val) ? null : val;
+      refreshLivePreview();
+    }
+
+    function renderDashboard() {
+      const active = appState.activeWorker || appState.workers[0] || '';
+      appState.activeWorker = active;
+
+      document.getElementById('menu-worker-label').textContent = active;
+      document.getElementById('kpi-worker-name').textContent = active;
+      document.getElementById('form-worker-label').textContent = active;
+      document.getElementById('ledger-heading').textContent = `${active} — Ledger`;
+
+      const periodText = appState.filterFrom || appState.filterTo
+        ? `${appState.filterFrom || 'Start'} to ${appState.filterTo || 'Present'}`
+        : 'All Months';
+      document.getElementById('ledger-period-badge').textContent = periodText;
+
+      renderMonthPills();
+      renderWorkerTabs();
+      updateStorageBadge();
+
+      const allComputed = computeFilteredLedger(appState.filterFrom, appState.filterTo);
+      const factoryGrandTotal = allComputed.reduce((sum, e) => sum + (e.type === 'advance' ? -e.totalAmount : e.totalAmount), 0);
+      const workerEntries = allComputed.filter(e => e.worker === active);
+
+      let totalBags = 0;
+      let totalKg = 0;
+      let packingAmt = 0;
+      let miscAmt = 0;
+      let advanceAmt = 0;
+
+      workerEntries.forEach(e => {
+        if (e.type === 'packing') {
+          totalBags += Number(e.bags) || 0;
+          totalKg += e.qtyKg;
+          packingAmt += e.totalAmount;
+        } else if (e.type === 'advance') {
+          advanceAmt += e.totalAmount;
+        } else {
+          miscAmt += e.totalAmount;
+        }
+      });
+
+      const grossTotal = packingAmt + miscAmt;
+      const netTotal = grossTotal - advanceAmt;
+      document.getElementById('kpi-bags').textContent = `${totalBags.toLocaleString('en-IN')} Bags`;
+      document.getElementById('kpi-kg').textContent = `${totalKg.toLocaleString('en-IN')} Kg`;
+      document.getElementById('kpi-mt').textContent = `(${(totalKg / 1000).toFixed(3)} MT)`;
+      document.getElementById('kpi-count').textContent = `${workerEntries.length} rows`;
+      document.getElementById('kpi-packing-amt').textContent = `₹ ${packingAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      document.getElementById('kpi-misc-amt').textContent = `₹ ${miscAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      document.getElementById('kpi-advance-amt').textContent = `- ₹ ${advanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      document.getElementById('kpi-net-total').textContent = `₹ ${netTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      document.getElementById('kpi-gross-sub').textContent = `Gross: ₹${Math.round(grossTotal).toLocaleString('en-IN')}`;
+      document.getElementById('kpi-factory-total').textContent = `Unit-2 Total: ₹${Math.round(factoryGrandTotal).toLocaleString('en-IN')}`;
+
+      refreshLivePreview();
+      renderLedger(workerEntries);
+    }
+
+    function renderLedger(precomputedWorkerEntries = null) {
+      const entries = precomputedWorkerEntries || computeFilteredLedger(appState.filterFrom, appState.filterTo)
+        .filter(e => e.worker === appState.activeWorker);
+
+      const query = (document.getElementById('ledger-search').value || '').toLowerCase().trim();
+      const visible = query
+        ? entries.filter(e =>
+            e.product.toLowerCase().includes(query) ||
+            (e.remark && e.remark.toLowerCase().includes(query)) ||
+            (e.panni && e.panni.toLowerCase().includes(query)) ||
+            (e.unit && e.unit.toLowerCase().includes(query))
+          )
+        : entries;
+
+      let sumBags = 0, sumKg = 0, sumAmt = 0;
+      visible.forEach(e => {
+        if (e.type === 'packing') {
+          sumBags += Number(e.bags) || 0;
+          sumKg += e.qtyKg;
+          sumAmt += e.totalAmount;
+        } else if (e.type === 'advance') {
+          sumAmt -= e.totalAmount;
+        } else {
+          sumAmt += e.totalAmount;
+        }
+      });
+
+      const tbody = document.getElementById('desktop-ledger-tbody');
+      const tfoot = document.getElementById('desktop-ledger-tfoot');
+      const mobileList = document.getElementById('mobile-ledger-list');
+      const mobileFooter = document.getElementById('mobile-ledger-footer');
+
+      if (visible.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="11" class="py-12 px-4 text-center text-slate-400 text-xs">
+              No bill entries found for <strong>${appState.activeWorker}</strong> in this date range. Add an entry above or import an Excel sheet.
+            </td>
+          </tr>
+        `;
+        tfoot.innerHTML = '';
+        mobileList.innerHTML = `
+          <div class="py-10 px-4 text-center text-slate-400 text-xs">
+            No bill entries found for <strong>${appState.activeWorker}</strong> in this period.
+          </div>
+        `;
+        mobileFooter.innerHTML = `<span>Total (0 rows)</span><span>₹ 0.00</span>`;
+        return;
+      }
+
+      tbody.innerHTML = visible.map(e => {
+        const isPacking = e.type === 'packing';
+        const isAdvance = e.type === 'advance';
+        const panniBadge = isAdvance
+          ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700">Advance</span>`
+          : !isPacking
+          ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700">${e.type === 'lot' ? 'Lot Bill' : 'Labour'}</span>`
+          : `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold ${
+              e.panni === 'With Panni' ? 'bg-emerald-50 text-emerald-700' :
+              e.panni === 'Open' ? 'bg-amber-50 text-amber-700' :
+              'bg-slate-100 text-slate-600'
+            }">${e.panni}</span>`;
+
+        return `
+          <tr class="${isAdvance ? 'bg-rose-50/40 hover:bg-rose-50/70' : 'hover:bg-slate-50/90'} transition">
+            <td class="py-3 px-4 whitespace-nowrap text-slate-500 font-medium tabular-nums">${formatDate(e.date)}</td>
+            <td class="py-3 px-4 font-bold ${isAdvance ? 'text-rose-700' : 'text-slate-900'}">
+              <div>${e.product}</div>
+              ${e.slabApplied ? `<span class="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800">${e.slabNote}</span>` : ''}
+            </td>
+            <td class="py-3 px-3 text-slate-600 font-semibold">${isPacking ? e.unit : '—'}</td>
+            <td class="py-3 px-3 whitespace-nowrap">${panniBadge}</td>
+            <td class="py-3 px-3 text-right tabular-nums text-slate-600">${isPacking ? e.packSize : '—'}</td>
+            <td class="py-3 px-3 text-right tabular-nums font-bold text-slate-800">${isPacking ? e.bags : e.count}</td>
+            <td class="py-3 px-3 text-right tabular-nums font-semibold text-slate-800">${isPacking ? e.qtyKg.toLocaleString('en-IN') : '—'}</td>
+            <td class="py-3 px-3 text-right tabular-nums">
+              <div class="font-bold text-slate-900">₹${isPacking ? e.appliedRateKg.toFixed(3) : e.appliedRateMT}</div>
+              ${isPacking ? `<div class="text-[10px] text-slate-400">₹${e.appliedRateMT}/MT</div>` : ''}
+            </td>
+            <td class="py-3 px-4 text-right tabular-nums font-extrabold ${isAdvance ? 'text-rose-600' : 'text-slate-900'}">
+              ${isAdvance ? '- ' : ''}₹${e.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td class="py-3 px-3 text-xs text-slate-500 max-w-[140px] truncate" title="${e.remark || ''}">${e.remark || ''}</td>
+            <td class="py-3 px-4 text-right whitespace-nowrap">
+              <button type="button" onclick="openEditModal('${e.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer" title="Edit">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              </button>
+              <button type="button" onclick="deleteEntry('${e.id}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer" title="Delete">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      tfoot.innerHTML = `
+        <tr>
+          <td colspan="5" class="py-3.5 px-4 text-xs uppercase tracking-wider text-slate-500">Net Total (${visible.length} entries • ${(sumKg / 1000).toFixed(3)} MT)</td>
+          <td class="py-3.5 px-3 text-right tabular-nums">${sumBags.toLocaleString('en-IN')}</td>
+          <td class="py-3.5 px-3 text-right tabular-nums">${sumKg.toLocaleString('en-IN')} Kg</td>
+          <td class="py-3.5 px-3"></td>
+          <td class="py-3.5 px-4 text-right tabular-nums text-emerald-700 text-base font-extrabold">₹${sumAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td colspan="2"></td>
+        </tr>
+      `;
+
+      mobileList.innerHTML = visible.map(e => {
+        const isPacking = e.type === 'packing';
+        const isAdvance = e.type === 'advance';
+        return `
+          <div class="p-4 flex items-start justify-between gap-3 ${isAdvance ? 'bg-rose-50/40' : ''}">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[11px] font-semibold text-slate-400 tabular-nums">${formatDate(e.date)}</span>
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                  isAdvance ? 'bg-rose-100 text-rose-700' : isPacking ? 'bg-slate-100 text-slate-700' : 'bg-indigo-50 text-indigo-700'
+                }">
+                  ${isPacking ? `${e.unit} • ${e.panni}` : isAdvance ? 'Advance / Kharchi' : (e.type === 'lot' ? 'Lot Bill' : 'Labour')}
+                </span>
+                ${e.slabApplied ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">${e.slabNote}</span>` : ''}
+              </div>
+              <div class="text-sm font-extrabold ${isAdvance ? 'text-rose-700' : 'text-slate-900'} mt-1 truncate">${e.product}</div>
+              <div class="text-xs text-slate-500 mt-0.5 tabular-nums">
+                ${isPacking
+                  ? `${e.bags} bags × ${e.packSize}kg = <strong>${e.qtyKg.toLocaleString('en-IN')} Kg</strong> @ ₹${e.appliedRateMT}/MT`
+                  : `${e.count} × ₹${e.rate}`}
+              </div>
+              ${e.remark ? `<div class="text-[11px] text-slate-400 mt-0.5">Note: ${e.remark}</div>` : ''}
+            </div>
+            <div class="text-right shrink-0 flex flex-col items-end justify-between gap-2">
+              <span class="text-sm font-extrabold ${isAdvance ? 'text-rose-600' : 'text-emerald-700'} tabular-nums">
+                ${isAdvance ? '- ' : ''}₹${e.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <div class="flex items-center gap-1">
+                <button type="button" onclick="openEditModal('${e.id}')" class="p-2 rounded-lg bg-slate-100 text-slate-600 hover:text-indigo-600 cursor-pointer" title="Edit">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                </button>
+                <button type="button" onclick="deleteEntry('${e.id}')" class="p-2 rounded-lg bg-rose-50 text-rose-600 cursor-pointer" title="Delete">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      mobileFooter.innerHTML = `
+        <span>Net Total: ${sumBags} Bags (${sumKg.toLocaleString('en-IN')} Kg)</span>
+        <span class="text-emerald-700 text-sm font-extrabold tabular-nums">₹${sumAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+      `;
+    }
+
+    function populateProductSuggestions() {
+      // Suggestions are driven dynamically from user's own Rate List after company prefix is typed
+    }
+
+    function handleProductTyping() {
+      const input = document.getElementById('p-product');
+      const dropdown = document.getElementById('product-smart-dropdown');
+      const rawVal = input.value;
+      const trimmed = rawVal.trim();
+
+      if (!trimmed || appState.rateRules.length === 0) {
+        dropdown.classList.add('hidden');
+        refreshLivePreview();
+        return;
+      }
+
+      const words = trimmed.split(/\s+/);
+      const lowerFull = trimmed.toLowerCase();
+      const { companyPrefix, coreProduct } = extractCompanyAndProduct(trimmed);
+      const query = (coreProduct || trimmed).toLowerCase();
+
+      // Find rules matching either the trailing product word(s) or full typed phrase
+      const seen = new Set();
+      const matches = [];
+      appState.rateRules.forEach(rule => {
+        const cat = (rule.category || '').trim();
+        const catLower = cat.toLowerCase();
+        const key = `${catLower}|${rule.unit}|${rule.panni}`;
+        if (seen.has(key)) return;
+
+        // If user typed a single word that doesn't match any rule product name (e.g. only company name "IFFCO"), keep dropdown hidden
+        const isMatch = catLower.includes(query) ||
+          (words.length > 1 && query.includes(catLower)) ||
+          (words.length === 1 && catLower.startsWith(lowerFull));
+
+        if (isMatch) {
+          seen.add(key);
+          matches.push(rule);
+        }
+      });
+
+      if (matches.length === 0) {
+        dropdown.classList.add('hidden');
+      } else {
+        dropdown.innerHTML = matches.slice(0, 8).map(rule => {
+          // Preserve any multi-word company prefix typed before the matched product (e.g., "SRI RAM" + "Mg" => "SRI RAM Mg")
+          let resolvedPrefix = companyPrefix;
+          if (!resolvedPrefix && words.length > 1) {
+            const catLower = rule.category.toLowerCase();
+            const idx = lowerFull.lastIndexOf(catLower);
+            if (idx > 0) {
+              resolvedPrefix = trimmed.slice(0, idx).trim();
+            } else {
+              resolvedPrefix = words.slice(0, -1).join(' ');
+            }
+          }
+          const fullSuggestedName = resolvedPrefix ? `${resolvedPrefix} ${rule.category}` : rule.category;
+
+          return `
+            <button type="button" onclick="applyProductSuggestion('${fullSuggestedName.replace(/'/g, "\\'")}', '${rule.unit}', '${rule.panni}')" class="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50 transition flex items-center justify-between gap-2 cursor-pointer">
+              <div>
+                <div class="text-xs font-bold text-slate-900">${fullSuggestedName}</div>
+                <div class="text-[10px] text-slate-500">${rule.unit} • ${rule.panni}${rule.thresholdMT > 0 ? ` • >${rule.thresholdMT} MT: ₹${rule.slabRate}/MT` : ''}</div>
+              </div>
+              <span class="px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-emerald-100 text-emerald-800 tabular-nums shrink-0">₹${rule.baseRate}/MT</span>
+            </button>
+          `;
+        }).join('');
+        dropdown.classList.remove('hidden');
+      }
+
+      refreshLivePreview();
+    }
+
+    function applyProductSuggestion(fullName, unit, panni) {
+      document.getElementById('p-product').value = fullName;
+      document.getElementById('product-smart-dropdown').classList.add('hidden');
+      if (unit) {
+        const unitSel = document.getElementById('p-unit');
+        if (Array.from(unitSel.options).some(o => o.value === unit)) {
+          unitSel.value = unit;
+          handleUnitChange();
+        }
+      }
+      if (panni) {
+        selectLiner(panni);
+      }
+      overrideRateMT = null;
+      document.getElementById('p-override-rate').classList.add('hidden');
+      refreshLivePreview();
+    }
+
+    function refreshLivePreview() {
+      const product = document.getElementById('p-product').value;
+      const { coreProduct } = extractCompanyAndProduct(product);
+      const displayProd = coreProduct || product.trim();
+      const unit = document.getElementById('p-unit').value;
+      const panni = document.getElementById('p-panni').value;
+      const packSize = parseFloat(document.getElementById('p-packsize').value) || 0;
+      const bags = parseInt(document.getElementById('p-bags').value, 10) || 0;
+
+      const qtyKg = packSize * bags;
+      const qtyMT = qtyKg / 1000;
+      const rule = findRateRule(product, unit, panni);
+
+      // Show or hide inline "New Product" prompt when user typed an actual product name that isn't in Rate List
+      const unknownBar = document.getElementById('inline-unknown-product-bar');
+      const currentKey = `${displayProd.toLowerCase()}|${unit}|${panni}`;
+      if (displayProd && !rule && dismissedUnknownKey !== currentKey) {
+        document.getElementById('unk-prod-display').textContent = displayProd;
+        document.getElementById('unk-unit-display').textContent = unit;
+        document.getElementById('unk-panni-display').textContent = panni;
+        unknownBar.classList.remove('hidden');
+      } else {
+        unknownBar.classList.add('hidden');
+      }
+
+      let rateMT = overrideRateMT !== null ? overrideRateMT : (rule ? Number(rule.baseRate) : 0);
+      let previewAmount = qtyMT * rateMT;
+      const slabBadge = document.getElementById('prev-slab-badge');
+      slabBadge.classList.add('hidden');
+
+      // Active rule or inline unsaved threshold preview
+      const activeThresh = rule ? Number(rule.thresholdMT || 0) : (parseFloat(document.getElementById('inline-quick-thresh')?.value) || 0);
+      const activeSlabRate = rule ? Number(rule.slabRate || 0) : (parseFloat(document.getElementById('inline-quick-slab')?.value) || 0);
+
+      if (overrideRateMT === null && activeThresh > 0 && activeSlabRate > 0 && qtyMT > 0) {
+        const computed = computeFilteredLedger(appState.filterFrom, appState.filterTo);
+        const existingMT = rule
+          ? computed
+              .filter(e => e.type === 'packing' && e.matchedRule && e.matchedRule.id === rule.id &&
+                (appState.slabScope === 'factory' || e.worker === appState.activeWorker))
+              .reduce((sum, e) => sum + e.qtyMT, 0)
+          : 0;
+
+        const newTotalMT = existingMT + qtyMT;
+        if (newTotalMT > activeThresh) {
+          rateMT = activeSlabRate;
+          previewAmount = qtyMT * rateMT;
+          slabBadge.textContent = `Total ${newTotalMT.toFixed(3)} MT > ${activeThresh} MT → Full @ ₹${activeSlabRate}/MT`;
+          slabBadge.classList.remove('hidden');
+        }
+      }
+
+      document.getElementById('prev-qty').textContent = `${qtyKg.toLocaleString('en-IN')} Kg`;
+      document.getElementById('prev-rate-kg').textContent = `₹${(rateMT / 1000).toFixed(3)}/Kg`;
+      document.getElementById('prev-rate-mt').textContent = `(₹${rateMT}/MT)`;
+      document.getElementById('prev-amount').textContent = `₹${previewAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    function applyInlineQuickRate() {
+      const val = parseFloat(document.getElementById('inline-quick-rate').value);
+      overrideRateMT = isNaN(val) ? null : val;
+      refreshLivePreview();
+    }
+
+    async function quickSaveProductToRateCard() {
+      const rawProd = document.getElementById('p-product').value.trim();
+      const { coreProduct } = extractCompanyAndProduct(rawProd);
+      const coreProd = coreProduct || rawProd;
+      const unit = document.getElementById('p-unit').value;
+      const panni = document.getElementById('p-panni').value;
+      const rateVal = parseFloat(document.getElementById('inline-quick-rate').value);
+      const threshVal = parseFloat(document.getElementById('inline-quick-thresh').value) || 0;
+      const slabVal = parseFloat(document.getElementById('inline-quick-slab').value) || 0;
+
+      if (!coreProd) {
+        showToast('Please enter a product name first', 'error');
+        return;
+      }
+      if (isNaN(rateVal) || rateVal <= 0) {
+        showToast('Enter a valid Rate (₹/MT) before saving to Rate List', 'error');
+        document.getElementById('inline-quick-rate').focus();
+        return;
+      }
+
+      appState.rateRules.unshift({
+        id: 'r-' + Date.now(),
+        category: coreProd,
+        keywords: [coreProd.toLowerCase()],
+        isCustom: false,
+        unit,
+        panni,
+        baseRate: rateVal,
+        thresholdMT: threshVal,
+        slabRate: slabVal
+      });
+
+      overrideRateMT = null;
+      document.getElementById('inline-quick-rate').value = '';
+      document.getElementById('inline-quick-thresh').value = '';
+      document.getElementById('inline-quick-slab').value = '';
+      document.getElementById('inline-unknown-product-bar').classList.add('hidden');
+      await persistAppState();
+      refreshLivePreview();
+      showToast(`Saved "${coreProd}" (${unit} • ${panni}) @ ₹${rateVal}/MT to Rate List`);
+    }
+
+    function dismissInlineUnknownProduct() {
+      const rawProd = document.getElementById('p-product').value.trim();
+      const { coreProduct } = extractCompanyAndProduct(rawProd);
+      const coreProd = coreProduct || rawProd;
+      const unit = document.getElementById('p-unit').value;
+      const panni = document.getElementById('p-panni').value;
+      dismissedUnknownKey = `${coreProd.toLowerCase()}|${unit}|${panni}`;
+
+      const rateVal = parseFloat(document.getElementById('inline-quick-rate').value);
+      if (!isNaN(rateVal) && rateVal > 0) {
+        overrideRateMT = rateVal;
+      }
+      document.getElementById('inline-unknown-product-bar').classList.add('hidden');
+      refreshLivePreview();
+      showToast('Continuing without adding to Rate List');
+    }
+
+    function addPackingEntry(e) {
+      e.preventDefault();
+      const date = document.getElementById('p-date').value;
+      const product = document.getElementById('p-product').value.trim();
+      const unit = document.getElementById('p-unit').value;
+      const panni = document.getElementById('p-panni').value;
+      const packSize = parseFloat(document.getElementById('p-packsize').value);
+      const bags = parseInt(document.getElementById('p-bags').value, 10);
+      const remark = document.getElementById('p-remark').value.trim();
+
+      appState.entries.push({
+        id: 'e-' + Date.now(),
+        worker: appState.activeWorker,
+        type: 'packing',
+        date,
+        product,
+        unit,
+        panni,
+        packSize,
+        bags,
+        remark,
+        manualRateMT: overrideRateMT
+      });
+
+      overrideRateMT = null;
+      dismissedUnknownKey = '';
+      document.getElementById('p-override-rate').value = '';
+      document.getElementById('p-override-rate').classList.add('hidden');
+      document.getElementById('inline-quick-rate').value = '';
+      document.getElementById('inline-quick-thresh').value = '';
+      document.getElementById('inline-quick-slab').value = '';
+      document.getElementById('inline-unknown-product-bar').classList.add('hidden');
+      document.getElementById('product-smart-dropdown').classList.add('hidden');
+      document.getElementById('p-bags').value = '';
+      document.getElementById('p-remark').value = '';
+
+      persistAppState();
+      renderDashboard();
+      showToast(`Added ${bags} bags of ${product}`);
+    }
+
+    function addMiscEntry(e) {
+      e.preventDefault();
+      const date = document.getElementById('m-date').value;
+      const count = parseFloat(document.getElementById('m-count').value);
+      const rate = parseFloat(document.getElementById('m-rate').value);
+      const remark = document.getElementById('m-remark').value.trim();
+      const isLot = currentEntryMode === 'lot';
+      const isAdvance = currentEntryMode === 'advance';
+
+      appState.entries.push({
+        id: (isAdvance ? 'adv-' : isLot ? 'lot-' : 'lab-') + Date.now(),
+        worker: appState.activeWorker,
+        type: isAdvance ? 'advance' : isLot ? 'lot' : 'labour',
+        date,
+        product: isAdvance ? 'Advance / Kharchi' : isLot ? 'Lot Bill' : 'Labour',
+        count,
+        rate,
+        remark
+      });
+
+      document.getElementById('m-remark').value = '';
+      persistAppState();
+      renderDashboard();
+      showToast(`Added ${isAdvance ? 'Advance / Kharchi' : isLot ? 'Lot Bill' : 'Labour'} entry`);
+    }
+
+    /*************************************************************************
+     * 6. EDIT & DELETE ENTRY MODAL
+     *************************************************************************/
+    function openEditModal(id) {
+      const entry = appState.entries.find(item => item.id === id);
+      if (!entry) return;
+
+      document.getElementById('edit-id').value = entry.id;
+      document.getElementById('edit-date').value = entry.date;
+      document.getElementById('edit-product').value = entry.product;
+      document.getElementById('edit-remark').value = entry.remark || '';
+
+      const pGroup = document.getElementById('edit-packing-group');
+      const mGroup = document.getElementById('edit-misc-group');
+
+      if (entry.type === 'packing') {
+        pGroup.classList.remove('hidden');
+        mGroup.classList.add('hidden');
+        mGroup.classList.remove('grid');
+        document.getElementById('edit-panni').value = entry.panni;
+        document.getElementById('edit-packsize').value = entry.packSize;
+        document.getElementById('edit-bags').value = entry.bags;
+      } else {
+        pGroup.classList.add('hidden');
+        mGroup.classList.remove('hidden');
+        mGroup.classList.add('grid');
+        document.getElementById('edit-count').value = entry.count;
+        document.getElementById('edit-rate').value = entry.rate;
+      }
+
+      document.getElementById('edit-modal').classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal').classList.add('hidden');
+    }
+
+    function saveEditedEntry(e) {
+      e.preventDefault();
+      const id = document.getElementById('edit-id').value;
+      const entry = appState.entries.find(item => item.id === id);
+      if (!entry) return;
+
+      entry.date = document.getElementById('edit-date').value;
+      entry.product = document.getElementById('edit-product').value.trim();
+      entry.remark = document.getElementById('edit-remark').value.trim();
+
+      if (entry.type === 'packing') {
+        entry.panni = document.getElementById('edit-panni').value;
+        entry.packSize = parseFloat(document.getElementById('edit-packsize').value) || entry.packSize;
+        entry.bags = parseInt(document.getElementById('edit-bags').value, 10) || entry.bags;
+      } else {
+        entry.count = parseFloat(document.getElementById('edit-count').value) || entry.count;
+        entry.rate = parseFloat(document.getElementById('edit-rate').value) || entry.rate;
+      }
+
+      closeEditModal();
+      persistAppState();
+      renderDashboard();
+      showToast('Entry updated');
+    }
+
+    function deleteEntry(id) {
+      appState.entries = appState.entries.filter(item => item.id !== id);
+      persistAppState();
+      renderDashboard();
+      showToast('Entry deleted');
+    }
+
+    function openDeleteWorkerBillsModal() {
+      document.getElementById('del-worker-name').textContent = appState.activeWorker;
+      const periodText = appState.filterFrom || appState.filterTo
+        ? `${appState.filterFrom || 'Start'} to ${appState.filterTo || 'Present'}`
+        : 'All Dates';
+      document.getElementById('del-bills-scope').options[0].text = `Only Selected Date Range (${periodText})`;
+      document.getElementById('del-bills-password').value = '';
+      document.getElementById('del-bills-error').classList.add('hidden');
+      document.getElementById('delete-bills-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('del-bills-password').focus(), 50);
+    }
+
+    function closeDeleteWorkerBillsModal() {
+      document.getElementById('delete-bills-modal').classList.add('hidden');
+    }
+
+    async function confirmDeleteWorkerBills(e) {
+      e.preventDefault();
+      const pwd = document.getElementById('del-bills-password').value;
+      const pwdHash = await hashPassword(pwd);
+      if (pwdHash !== appState.passwordHash) {
+        document.getElementById('del-bills-error').classList.remove('hidden');
+        return;
+      }
+
+      const scope = document.getElementById('del-bills-scope').value;
+      const beforeCount = appState.entries.length;
+
+      if (scope === 'all') {
+        appState.entries = appState.entries.filter(item => item.worker !== appState.activeWorker);
+      } else {
+        const from = appState.filterFrom;
+        const to = appState.filterTo;
+        appState.entries = appState.entries.filter(item => {
+          if (item.worker !== appState.activeWorker) return true;
+          const inRange = (!from || item.date >= from) && (!to || item.date <= to);
+          return !inRange;
+        });
+      }
+
+      const deletedCount = beforeCount - appState.entries.length;
+      closeDeleteWorkerBillsModal();
+      await persistAppState();
+      renderDashboard();
+      showToast(`Deleted ${deletedCount} bill entries for ${appState.activeWorker}`);
+    }
+
+    /*************************************************************************
+     * 7. PASSWORD-PROTECTED RATE DRAWER & BACKUPS
+     *************************************************************************/
+    function openRateDrawer(tab = 'rates') {
+      pendingDrawerTab = tab;
+      document.getElementById('drawer-backdrop').classList.remove('hidden');
+      document.getElementById('rate-drawer').classList.remove('translate-x-full');
+
+      if (isDrawerUnlocked) {
+        document.getElementById('drawer-locked').classList.add('hidden');
+        document.getElementById('drawer-unlocked').classList.remove('hidden');
+        renderDrawerRates();
+        document.getElementById('set-slab-scope').value = appState.slabScope;
+        document.getElementById('set-autolock').value = String(appState.autoLockMinutes ?? 5);
+        document.getElementById('set-lock-on-load').value = appState.lockOnLoad === false ? 'no' : 'yes';
+        updateStorageBadge();
+        switchDrawerTab(pendingDrawerTab);
+      } else {
+        document.getElementById('drawer-locked').classList.remove('hidden');
+        document.getElementById('drawer-unlocked').classList.add('hidden');
+        document.getElementById('drawer-password').value = '';
+        document.getElementById('drawer-error').classList.add('hidden');
+        setTimeout(() => document.getElementById('drawer-password').focus(), 100);
+      }
+    }
+
+    function closeRateDrawer() {
+      document.getElementById('drawer-backdrop').classList.add('hidden');
+      document.getElementById('rate-drawer').classList.add('translate-x-full');
+    }
+
+    async function unlockDrawer(e) {
+      e.preventDefault();
+      const enteredHash = await hashPassword(document.getElementById('drawer-password').value);
+      if (enteredHash === appState.passwordHash) {
+        isDrawerUnlocked = true;
+        openRateDrawer(pendingDrawerTab);
+        showToast('Rate Master unlocked');
+      } else {
+        document.getElementById('drawer-error').classList.remove('hidden');
+      }
+    }
+
+    function switchDrawerTab(tab) {
+      const rBtn = document.getElementById('dtab-rates');
+      const sBtn = document.getElementById('dtab-settings');
+      const rPanel = document.getElementById('dpanel-rates');
+      const sPanel = document.getElementById('dpanel-settings');
+
+      if (tab === 'rates') {
+        rBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-2xs border border-slate-200 cursor-pointer';
+        sBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer';
+        rPanel.classList.remove('hidden');
+        sPanel.classList.add('hidden');
+      } else {
+        sBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-2xs border border-slate-200 cursor-pointer';
+        rBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer';
+        sPanel.classList.remove('hidden');
+        rPanel.classList.add('hidden');
+      }
+    }
+
+    function renderDrawerRates() {
+      const q = (document.getElementById('drawer-search').value || '').toLowerCase().trim();
+      const rules = q
+        ? appState.rateRules.filter(r =>
+            r.category.toLowerCase().includes(q) ||
+            r.unit.toLowerCase().includes(q) ||
+            r.panni.toLowerCase().includes(q) ||
+            String(r.baseRate).includes(q)
+          )
+        : appState.rateRules;
+
+      const tbody = document.getElementById('drawer-rates-tbody');
+      if (rules.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-10 px-4 text-center text-slate-400 text-xs">Your Rate List is empty. Add your products above or directly from the main entry form.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rules.map(r => `
+        <tr class="hover:bg-slate-50">
+          <td class="py-2.5 px-4 font-bold text-slate-800">${r.category}</td>
+          <td class="py-2.5 px-2 text-slate-600">${r.unit}</td>
+          <td class="py-2.5 px-2 text-slate-600">${r.panni}</td>
+          <td class="py-2.5 px-2">
+            <input type="number" step="0.01" value="${r.baseRate}" onchange="updateRateField('${r.id}', 'baseRate', this.value)" class="w-20 px-2 py-1 rounded-lg border border-slate-200 tabular-nums font-bold text-slate-900" />
+          </td>
+          <td class="py-2.5 px-2">
+            <div class="inline-flex items-center gap-1">
+              <input type="number" step="0.1" min="0" value="${r.thresholdMT || ''}" placeholder="0" onchange="updateRateField('${r.id}', 'thresholdMT', this.value)" class="w-16 px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs tabular-nums font-semibold text-slate-800" />
+              <span class="text-[10px] text-slate-400 font-semibold">MT</span>
+            </div>
+          </td>
+          <td class="py-2.5 px-2">
+            <input type="number" step="0.01" value="${r.slabRate || ''}" placeholder="—" onchange="updateRateField('${r.id}', 'slabRate', this.value)" class="w-20 px-2 py-1 rounded-lg border border-slate-200 tabular-nums font-bold text-amber-800" />
+          </td>
+          <td class="py-2.5 px-3 text-right">
+            <button type="button" onclick="deleteRateRule('${r.id}')" class="text-slate-400 hover:text-rose-600 p-1 cursor-pointer">✕</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function updateRateField(id, field, val) {
+      const rule = appState.rateRules.find(r => r.id === id);
+      if (!rule) return;
+      rule[field] = Number(val) || 0;
+      persistAppState();
+      renderDashboard();
+      showToast('Rate updated');
+    }
+
+    function addRateRule(e) {
+      e.preventDefault();
+      const rawCat = document.getElementById('nr-cat').value.trim();
+      const cat = stripCompanyPrefix(rawCat) || rawCat;
+      const unit = document.getElementById('nr-unit').value;
+      const panni = document.getElementById('nr-panni').value;
+      const baseRate = Number(document.getElementById('nr-base').value) || 0;
+      const thresholdMT = Number(document.getElementById('nr-thresh').value) || 0;
+      const slabRate = Number(document.getElementById('nr-slab').value) || 0;
+
+      appState.rateRules.unshift({
+        id: 'r-' + Date.now(),
+        category: cat,
+        keywords: [cat.toLowerCase()],
+        isCustom: false,
+        unit,
+        panni,
+        baseRate,
+        thresholdMT,
+        slabRate
+      });
+
+      document.getElementById('nr-cat').value = '';
+      document.getElementById('nr-base').value = '';
+      document.getElementById('nr-thresh').value = '';
+      document.getElementById('nr-slab').value = '';
+      persistAppState();
+      renderDrawerRates();
+      renderDashboard();
+      showToast(`Added rate rule for ${cat}`);
+    }
+
+    function deleteRateRule(id) {
+      appState.rateRules = appState.rateRules.filter(r => r.id !== id);
+      persistAppState();
+      renderDrawerRates();
+      renderDashboard();
+      showToast('Rate rule deleted');
+    }
+
+    function updateSlabSettings() {
+      appState.slabScope = document.getElementById('set-slab-scope').value;
+      appState.slabMode = 'retroactive';
+      persistAppState();
+      renderDashboard();
+      showToast('Slab rules updated');
+    }
+
+    function updateSecuritySettings() {
+      appState.autoLockMinutes = Number(document.getElementById('set-autolock').value) || 0;
+      appState.lockOnLoad = document.getElementById('set-lock-on-load').value === 'yes';
+      if (!appState.lockOnLoad && sessionPassword) {
+        sessionStorage.setItem('u2_tab_pwd', sessionPassword);
+      } else {
+        sessionStorage.removeItem('u2_tab_pwd');
+      }
+      persistAppState();
+      resetIdleTimer();
+      showToast('Security & auto-lock settings saved');
+    }
+
+    async function updateAdminPassword() {
+      const p = document.getElementById('set-new-password').value.trim();
+      if (p.length < 4) {
+        showToast('Password must be at least 4 characters', 'error');
+        return;
+      }
+      appState.passwordHash = await hashPassword(p);
+      sessionPassword = p;
+      if (!appState.lockOnLoad) {
+        sessionStorage.setItem('u2_tab_pwd', p);
+      }
+      document.getElementById('set-new-password').value = '';
+      await persistAppState();
+      showToast('Admin password updated & storage re-encrypted');
+    }
+
+    /*************************************************************************
+     * 8. ADD WORKER & JSON BACKUP / RESTORE
+     *************************************************************************/
+    function openAddWorkerModal() {
+      document.getElementById('worker-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('new-worker-input').focus(), 50);
+    }
+
+    function closeAddWorkerModal() {
+      document.getElementById('worker-modal').classList.add('hidden');
+    }
+
+    function addWorker(e) {
+      e.preventDefault();
+      const name = document.getElementById('new-worker-input').value.trim();
+      if (!name) return;
+      if (appState.workers.some(w => w.toLowerCase() === name.toLowerCase())) {
+        showToast('Worker already exists', 'error');
+        return;
+      }
+      appState.workers.push(name);
+      appState.activeWorker = name;
+      document.getElementById('new-worker-input').value = '';
+      closeAddWorkerModal();
+      persistAppState();
+      renderDashboard();
+      showToast(`Added worker: ${name}`);
+    }
+
+    function openDeleteWorkerModal() {
+      if (appState.workers.length <= 1) {
+        showToast('At least one worker must remain', 'error');
+        return;
+      }
+      document.getElementById('delete-worker-target').textContent = appState.activeWorker;
+      document.getElementById('delete-worker-password').value = '';
+      document.getElementById('delete-worker-error').classList.add('hidden');
+      document.getElementById('delete-worker-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('delete-worker-password').focus(), 50);
+    }
+
+    function closeDeleteWorkerModal() {
+      document.getElementById('delete-worker-modal').classList.add('hidden');
+    }
+
+    async function confirmDeleteWorker(e) {
+      e.preventDefault();
+      const pwd = document.getElementById('delete-worker-password').value;
+      const pwdHash = await hashPassword(pwd);
+      if (pwdHash !== appState.passwordHash) {
+        document.getElementById('delete-worker-error').classList.remove('hidden');
+        return;
+      }
+
+      const target = appState.activeWorker;
+      appState.workers = appState.workers.filter(w => w !== target);
+      appState.entries = appState.entries.filter(item => item.worker !== target);
+      appState.activeWorker = appState.workers[0] || '';
+
+      closeDeleteWorkerModal();
+      await persistAppState();
+      renderDashboard();
+      showToast(`Deleted worker: ${target}`);
+    }
+
+    function downloadJSONBackup() {
+      const today = new Date().toISOString().slice(0, 10);
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(appState, null, 2));
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = `Unit2_Packing_Backup_${today}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      showToast('Backup downloaded (.json)');
+    }
+
+    function restoreJSONBackup(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (!imported.workers || !imported.rateRules || !imported.entries) throw new Error('Invalid format');
+          const preservedHash = appState.passwordHash;
+          appState = { ...appState, ...imported, passwordHash: imported.passwordHash || preservedHash };
+          await persistAppState();
+          syncDates();
+          populateProductSuggestions();
+          renderDashboard();
+          showToast('Backup restored successfully');
+        } catch (err) {
+          showToast('Invalid backup file', 'error');
+        }
+        event.target.value = '';
+      };
+      reader.readAsText(file);
+    }
+
+    async function resetDemoData() {
+      localStorage.removeItem(STORAGE_KEY);
+      appState = {
+        passwordHash: appState.passwordHash || DEFAULT_PASSWORD_HASH,
+        workers: [...DEFAULT_WORKERS],
+        rateRules: [],
+        entries: JSON.parse(JSON.stringify(DEFAULT_ENTRIES)),
+        activeWorker: 'Bhgwati',
+        filterFrom: '2026-10-01',
+        filterTo: '2026-10-31',
+        slabScope: 'worker',
+        slabMode: 'after',
+        autoLockMinutes: 5,
+        lockOnLoad: true
+      };
+      await persistAppState();
+      syncDates();
+      populateProductSuggestions();
+      renderDashboard();
+      showToast('Reset to clean workspace');
+    }
+
+    /*************************************************************************
+     * 9. EXCEL (.XLSX) EXPORT (SINGLE WORKER & ALL-IN-ONE MASTER SHEET)
+     *************************************************************************/
+    function triggerXLSXDownload(wb, fileName) {
+      if (typeof XLSX !== 'undefined' && XLSX.write) {
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 500);
+      } else {
+        // Offline CSV fallback when SheetJS CDN is unreachable without internet
+        const firstSheet = wb.SheetNames[0];
+        const rows = wb.Sheets[firstSheet] ? Object.values(wb.Sheets[firstSheet]) : [];
+        showToast('Offline fallback: Download .json backup or connect once to cache Excel', 'error');
+      }
+    }
+
+    function toggleExportMenu() {
+      document.getElementById('export-menu').classList.toggle('hidden');
+    }
+
+    function buildExcelBlock(workerName, workerEntries, periodLabel) {
+      const rows = [];
+      rows.push([`UNIT-2 PACKING BILL — ${workerName.toUpperCase()}`, '', '', '', '', '', '', `Period: ${periodLabel}`, '', '']);
+      rows.push(['Date', 'Product Name', 'Kg/Gm', 'With Panni', 'Pack Size', 'No. of Bag', 'Quantity (Kg)', 'Rate (/Kg)', 'Total Amount', 'Remark']);
+
+      let totalBags = 0, totalKg = 0, totalAmount = 0;
+
+      workerEntries.forEach(e => {
+        if (e.type === 'packing') {
+          totalBags += Number(e.bags) || 0;
+          totalKg += e.qtyKg;
+          totalAmount += e.totalAmount;
+
+          rows.push([
+            formatDate(e.date),
+            e.product,
+            e.unit,
+            e.panni,
+            Number(e.packSize),
+            Number(e.bags),
+            Number(e.qtyKg),
+            Number(e.appliedRateKg.toFixed(4)),
+            Number(e.totalAmount.toFixed(2)),
+            e.slabApplied ? `${e.slabNote}${e.remark ? ' | ' + e.remark : ''}` : (e.remark || '')
+          ]);
+        } else if (e.type === 'advance') {
+          totalAmount -= e.totalAmount;
+          rows.push([
+            formatDate(e.date),
+            'Less: Advance / Kharchi',
+            '',
+            '',
+            '',
+            Number(e.count),
+            '',
+            -Number(e.rate),
+            -Number(e.totalAmount.toFixed(2)),
+            e.remark || ''
+          ]);
+        } else {
+          totalAmount += e.totalAmount;
+          rows.push([
+            formatDate(e.date),
+            e.product,
+            '',
+            '',
+            '',
+            Number(e.count),
+            '',
+            Number(e.rate),
+            Number(e.totalAmount.toFixed(2)),
+            e.remark || ''
+          ]);
+        }
+      });
+
+      rows.push([
+        '',
+        `Net Total (${workerName})`,
+        '',
+        '',
+        '',
+        totalBags,
+        totalKg,
+        '',
+        Number(totalAmount.toFixed(2)),
+        `${(totalKg / 1000).toFixed(3)} MT`
+      ]);
+
+      return { rows, totalBags, totalKg, totalAmount };
+    }
+
+    function exportSingleWorkerExcel() {
+      document.getElementById('export-menu').classList.add('hidden');
+      const all = computeFilteredLedger(appState.filterFrom, appState.filterTo);
+      const entries = all.filter(e => e.worker === appState.activeWorker);
+      const period = appState.filterFrom || appState.filterTo
+        ? `${appState.filterFrom || 'Start'} to ${appState.filterTo || 'Present'}`
+        : 'All_Dates';
+
+      const { rows } = buildExcelBlock(appState.activeWorker, entries, period);
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 13 }, { wch: 24 }, { wch: 9 }, { wch: 15 }, { wch: 11 },
+        { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 24 }
+      ];
+
+      const wb = XLSX.utils.book_new();
+      const sheetName = appState.activeWorker.replace(/[\\/?*[\]]/g, '_').slice(0, 31) || 'Worker_Bill';
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+      const fileName = `Unit2_Packing_Bill_${sheetName}_${period.replace(/\s+/g, '_')}.xlsx`;
+      triggerXLSXDownload(wb, fileName);
+      showToast(`Downloaded ${fileName}`);
+    }
+
+    function exportAllWorkersExcel() {
+      document.getElementById('export-menu').classList.add('hidden');
+      const all = computeFilteredLedger(appState.filterFrom, appState.filterTo);
+      const period = appState.filterFrom || appState.filterTo
+        ? `${appState.filterFrom || 'Start'} to ${appState.filterTo || 'Present'}`
+        : 'All_Dates';
+
+      const masterRows = [];
+      let grandBags = 0, grandKg = 0, grandAmt = 0;
+
+      appState.workers.forEach((wName, index) => {
+        const wEntries = all.filter(e => e.worker === wName);
+        const { rows, totalBags, totalKg, totalAmount } = buildExcelBlock(wName, wEntries, period);
+
+        masterRows.push(...rows);
+        grandBags += totalBags;
+        grandKg += totalKg;
+        grandAmt += totalAmount;
+
+        if (index < appState.workers.length - 1) {
+          masterRows.push([]);
+          masterRows.push([]);
+        }
+      });
+
+      masterRows.push([]);
+      masterRows.push([
+        '',
+        'G.TOTAL (ALL WORKERS — UNIT-2)',
+        '',
+        '',
+        '',
+        grandBags,
+        grandKg,
+        '',
+        Number(grandAmt.toFixed(2)),
+        `${(grandKg / 1000).toFixed(3)} MT`
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet(masterRows);
+      ws['!cols'] = [
+        { wch: 13 }, { wch: 28 }, { wch: 9 }, { wch: 15 }, { wch: 11 },
+        { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 16 }, { wch: 26 }
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'All_Workers_Unit2');
+
+      const fileName = `Unit2_All_Workers_Master_Bill_${period.replace(/\s+/g, '_')}.xlsx`;
+      triggerXLSXDownload(wb, fileName);
+      showToast(`Downloaded ${fileName}`);
+    }
+
+    /*************************************************************************
+     * 10. HELPERS & STARTUP
+     *************************************************************************/
+    function formatDate(iso) {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-');
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${d}-${months[Number(m) - 1]}-${y.slice(2)}`;
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const el = document.createElement('div');
+      el.className = `px-4 py-2.5 rounded-xl shadow-lg text-xs font-bold text-white transition ${
+        type === 'error' ? 'bg-rose-600' : 'bg-slate-900'
+      }`;
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.classList.add('opacity-0');
+        setTimeout(() => el.remove(), 2800);
+      }, 2800);
+    }
+
+    /*************************************************************************
+     * 11. SMART EXCEL PRODUCTION SHEET IMPORTER & VERIFICATION ENGINE
+     *************************************************************************/
+    function downloadProductionTemplate() {
+      const templateRows = [
+        ['Date', 'Worker Name', 'Product Name', 'Unit (Kg/Gm)', 'With Panni', 'Bag Kg', 'No. of Bag', 'Remark'],
+        ['02-11-2026', 'Bhgwati', 'Iffco Mg', '2kg', 'No', 20, 57, ''],
+        ['02-11-2026', 'SHEELA', 'Spic Mg', '1kg', 'No', 25, 162, ''],
+        ['03-11-2026', 'Bhgwati', 'Spic Micro', '5kg', 'Yes', 25, 72, ''],
+        ['03-11-2026', 'SUNITA', 'TG Magnum', '1kg', 'Open', 20, 50, 'Open'],
+        ['04-11-2026', 'Bharat Raj', 'TG Dharti Jeevan', '20kg', 'Bucket', 20, 100, ''],
+        ['04-11-2026', 'Bharat Raj', 'Labour', '', '', '', 2, '375']
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet(templateRows);
+      ws['!cols'] = [
+        { wch: 14 }, { wch: 20 }, { wch: 24 }, { wch: 14 },
+        { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 22 }
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Production_Entry');
+      triggerXLSXDownload(wb, 'Unit2_Standard_Production_Template.xlsx');
+      showToast('Downloaded Standard Production Template (.xlsx)');
+    }
+
+    function normalizeWorkerName(rawName) {
+      const cleaned = String(rawName || '').trim().replace(/\s+/g, ' ');
+      if (!cleaned) return '';
+      const lower = cleaned.toLowerCase();
+
+      // Common spelling aliases in Unit-2 sheets so duplicate worker tabs are not created
+      const aliasMap = {
+        'bhagwati': 'Bhgwati',
+        'bhgwati': 'Bhgwati',
+        'shunita': 'SUNITA',
+        'sunita': 'SUNITA',
+        'chandna': 'Pradeep/Chandna',
+        'chandan': 'Pradeep/Chandna',
+        'pradeep': 'Pradeep/Chandna',
+        'mithilesh': 'Sagar (Mithilesh)',
+        'sagar': 'Sagar (Mithilesh)'
+      };
+      if (aliasMap[lower]) {
+        const canonical = appState.workers.find(w => w.toLowerCase() === aliasMap[lower].toLowerCase());
+        if (canonical) return canonical;
+      }
+
+      // Match existing worker in appState (case-insensitive or partial alias match)
+      const exact = appState.workers.find(w => w.toLowerCase() === lower);
+      if (exact) return exact;
+
+      const fuzzy = appState.workers.find(w => {
+        const wl = w.toLowerCase();
+        return wl.includes(lower) || lower.includes(wl.split('/')[0].split('(')[0].trim());
+      });
+      if (fuzzy) return fuzzy;
+
+      // Capitalize clean new worker name
+      return cleaned.replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function normalizePanniType(rawVal) {
+      const s = String(rawVal || '').toLowerCase().trim();
+      if (!s || s === 'no' || s === 'n' || s === 'false' || s.includes('without') || s.includes('bina')) {
+        return 'Without Panni';
+      }
+      if (s.includes('open')) return 'Open';
+      if (s.includes('bucket') || s.includes('balti')) return 'Bucket';
+      if (s.includes('carton')) return 'Carton';
+      if (s.includes('transfer')) return 'Transfer';
+      if (s === 'yes' || s === 'y' || s === 'true' || s === '1' || s.includes('with') || s.includes('panni')) {
+        return 'With Panni';
+      }
+      return 'Without Panni';
+    }
+
+    function parseExcelDateToISO(val, fallbackISO = '') {
+      if (val === null || val === undefined || val === '') return fallbackISO;
+
+      // Excel serial date number
+      if (typeof val === 'number' && val > 25000 && val < 80000) {
+        const utcDays = Math.floor(val - 25569);
+        const d = new Date(utcDays * 86400 * 1000);
+        if (!isNaN(d.getTime())) {
+          return d.toISOString().slice(0, 10);
+        }
+      }
+
+      const str = String(val).trim();
+      if (!str) return fallbackISO;
+
+      // Already YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+
+      // DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY or DD-MM-YY
+      const dmy = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/);
+      if (dmy) {
+        const day = dmy[1].padStart(2, '0');
+        const month = dmy[2].padStart(2, '0');
+        let year = dmy[3];
+        if (year.length === 2) year = '20' + year;
+        if (Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
+          return `${year}-${month}-${day}`;
+        }
+      }
+
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString().slice(0, 10);
+      }
+      return fallbackISO;
+    }
+
+    function normalizeUnitLabel(rawUnit, packSize, productName = '') {
+      // 1. First check explicit Unit column (handles "2 Kg", "5kg", "2", "500 Gm", etc.)
+      const rawStr = String(rawUnit ?? '').trim();
+      if (rawStr && rawStr !== '-' && rawStr.toLowerCase() !== 'na') {
+        const match = rawStr.toLowerCase().match(/(\d+(?:\.\d+)?)\s*(kg|gm|g)?/);
+        if (match) {
+          const num = parseFloat(match[1]);
+          if (!isNaN(num) && num > 0) {
+            const isGram = match[2] && match[2].startsWith('g');
+            return `${num}${isGram ? 'gm' : 'kg'}`;
+          }
+        }
+      }
+
+      // 2. Next extract unit written inside Product Name (e.g., "Iffco Mg 2kg.", "Spic Mg 1kg.", "TG Dharti Jeevan 5kg.")
+      const prodMatch = String(productName || '').toLowerCase().match(/(\d+(?:\.\d+)?)\s*(kg|gm|g)\b/);
+      if (prodMatch) {
+        const num = parseFloat(prodMatch[1]);
+        const suffix = prodMatch[2].startsWith('g') ? 'gm' : 'kg';
+        if (!isNaN(num) && num > 0) return `${num}${suffix}`;
+      }
+
+      // 3. Fallback to Bag Kg / Pack Size (e.g., 20 -> 20kg, 25 -> 25kg, 50 -> 50kg)
+      const ps = parseFloat(packSize);
+      if (!isNaN(ps) && ps > 0) return `${ps}kg`;
+      return '1kg';
+    }
+
+    function handleProductionExcelUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      if (typeof XLSX === 'undefined') {
+        showToast('Excel parser library not loaded. Check internet connection.', 'error');
+        event.target.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const parsedRows = [];
+
+          workbook.SheetNames.forEach(sheetName => {
+            const ws = workbook.Sheets[sheetName];
+            const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            if (!aoa || aoa.length === 0) return;
+
+            // Check if sheet tab name is a date (e.g. "02-11-26") or a worker name
+            const sheetDateISO = parseExcelDateToISO(sheetName, '');
+            const sheetWorkerFallback = !sheetDateISO && !/^(sheet|production|all|summary|master)/i.test(sheetName.trim())
+              ? normalizeWorkerName(sheetName)
+              : '';
+
+            let activeSectionWorker = sheetWorkerFallback;
+            let activeSectionDate = sheetDateISO || appState.filterTo || new Date().toISOString().slice(0, 10);
+            let colMap = null;
+
+            for (let r = 0; r < aoa.length; r++) {
+              const row = aoa[r].map(cell => String(cell ?? '').trim());
+              const nonEmpty = row.filter(Boolean);
+              if (nonEmpty.length === 0) continue;
+
+              const joinedLower = row.join(' ').toLowerCase();
+
+              // Detect section header with worker name above a table block
+              if (nonEmpty.length <= 2 && !joinedLower.includes('total') && !joinedLower.includes('packing bill') && !joinedLower.includes('product')) {
+                const maybeDate = parseExcelDateToISO(nonEmpty[0], '');
+                if (maybeDate) {
+                  activeSectionDate = maybeDate;
+                } else if (nonEmpty[0].length >= 2 && nonEmpty[0].length <= 35 && isNaN(Number(nonEmpty[0]))) {
+                  activeSectionWorker = normalizeWorkerName(nonEmpty[0]);
+                }
+                continue;
+              }
+
+              // Detect header row dynamically
+              if (
+                (joinedLower.includes('product') || joinedLower.includes('item')) &&
+                (joinedLower.includes('bag') || joinedLower.includes('pack') || joinedLower.includes('thek') || joinedLower.includes('worker') || joinedLower.includes('date'))
+              ) {
+                colMap = {
+                  thekadar: row.findIndex(c => {
+                    const lc = c.toLowerCase();
+                    return lc.includes('thek') || lc.includes('worker') || lc.includes('contractor') || lc.includes('party') || lc === 'name';
+                  }),
+                  date: row.findIndex(c => c.toLowerCase().includes('date')),
+                  product: row.findIndex(c => c.toLowerCase().includes('product') || c.toLowerCase().includes('item')),
+                  unit: row.findIndex(c => {
+                    const lc = c.toLowerCase().trim();
+                    return lc.includes('unit') || lc.includes('kg/gm') || lc === 'kg' || lc === 'gm' || lc === 'size';
+                  }),
+                  panni: row.findIndex(c => c.toLowerCase().includes('panni') || c.toLowerCase().includes('type') || c.toLowerCase().includes('liner')),
+                  packSize: row.findIndex(c => {
+                    const lc = c.toLowerCase().trim();
+                    return lc.includes('bag kg') || lc.includes('pack size') || lc.includes('master') || lc === 'bag wt';
+                  }),
+                  bags: row.findIndex(c => c.toLowerCase().includes('no. of bag') || c.toLowerCase().includes('no of bag') || c.toLowerCase().includes('bags') || c.toLowerCase() === 'bag'),
+                  qtyKg: row.findIndex(c => c.toLowerCase().includes('quantity') || c.toLowerCase().includes('qty')),
+                  rate: row.findIndex(c => c.toLowerCase().includes('rate')),
+                  amount: row.findIndex(c => c.toLowerCase().includes('amount') || c.toLowerCase().includes('total')),
+                  remark: row.findIndex(c => c.toLowerCase().includes('remark'))
+                };
+                if (colMap.packSize === colMap.unit) {
+                  colMap.packSize = row.findIndex((c, idx) => idx !== colMap.unit && (c.toLowerCase().includes('bag kg') || c.toLowerCase().includes('pack')));
+                }
+                if (colMap.qtyKg === colMap.bags) {
+                  colMap.qtyKg = row.findIndex((c, idx) => idx !== colMap.bags && (c.toLowerCase().includes('quantity') || c.toLowerCase().includes('qty')));
+                }
+                continue;
+              }
+
+              // Skip Total / G.Total / Title rows
+              if (joinedLower.includes('g.total') || joinedLower.includes('g. total') || joinedLower.includes('packing bill')) {
+                continue;
+              }
+              if (colMap && colMap.product >= 0 && /^total\b/i.test(row[colMap.product])) {
+                continue;
+              }
+
+              // If no header found yet, try default standard template column order
+              if (!colMap) {
+                const firstDate = parseExcelDateToISO(aoa[r][0], '');
+                if (firstDate && row[1] && row[2]) {
+                  colMap = { date: 0, thekadar: 1, product: 2, unit: 3, panni: 4, packSize: 5, bags: 6, remark: 7, qtyKg: -1, rate: -1 };
+                } else {
+                  continue;
+                }
+              }
+
+              const rawProduct = colMap.product >= 0 ? String(aoa[r][colMap.product] || '').trim() : '';
+              const rawThekadar = colMap.thekadar >= 0 ? String(aoa[r][colMap.thekadar] || '').trim() : '';
+              if (rawThekadar) {
+                activeSectionWorker = normalizeWorkerName(rawThekadar);
+              }
+              const rowWorker = activeSectionWorker || 'Unknown Worker';
+
+              const rawDateCell = colMap.date >= 0 ? aoa[r][colMap.date] : '';
+              const parsedDate = parseExcelDateToISO(rawDateCell, activeSectionDate);
+              if (parsedDate) activeSectionDate = parsedDate;
+
+              const prodLower = rawProduct.toLowerCase();
+              const isLabour = prodLower === 'labour' || prodLower.startsWith('labour ');
+              const isLot = prodLower.includes('lot bill') || prodLower === 'lot';
+
+              if (isLabour || isLot) {
+                const cnt = parseFloat(colMap.bags >= 0 ? aoa[r][colMap.bags] : 1) || 1;
+                const remarkStr = colMap.remark >= 0 ? String(aoa[r][colMap.remark] || '').trim() : '';
+                const remarkRateMatch = remarkStr.match(/(\d+(?:\.\d+)?)/);
+                const sheetRate = parseFloat(colMap.rate >= 0 ? aoa[r][colMap.rate] : 0) ||
+                  (remarkRateMatch ? parseFloat(remarkRateMatch[1]) : (isLot ? 85 : 300));
+                parsedRows.push({
+                  tempId: 'imp-' + parsedRows.length + '-' + Date.now(),
+                  selected: true,
+                  worker: rowWorker,
+                  type: isLot ? 'lot' : 'labour',
+                  date: parsedDate || appState.filterTo || new Date().toISOString().slice(0, 10),
+                  product: rawProduct || (isLot ? 'Lot Bill' : 'Labour'),
+                  unit: '',
+                  panni: '',
+                  packSize: 0,
+                  bags: cnt,
+                  manualRateMT: sheetRate,
+                  remark: remarkStr,
+                  warning: !parsedDate ? 'Check Date' : ''
+                });
+                continue;
+              }
+
+              const rawUnit = colMap.unit >= 0 ? aoa[r][colMap.unit] : '';
+              const rawPanni = colMap.panni >= 0 ? aoa[r][colMap.panni] : '';
+              let packSize = parseFloat(colMap.packSize >= 0 ? aoa[r][colMap.packSize] : 0) || 0;
+              let bags = parseInt(colMap.bags >= 0 ? aoa[r][colMap.bags] : 0, 10) || 0;
+              const sheetQtyKg = parseFloat(colMap.qtyKg >= 0 ? aoa[r][colMap.qtyKg] : 0) || 0;
+
+              if (!packSize && rawUnit !== '' && rawUnit !== null && rawUnit !== undefined) {
+                const uNum = parseFloat(String(rawUnit));
+                if (!isNaN(uNum) && uNum > 0) packSize = String(rawUnit).toLowerCase().includes('gm') ? uNum / 1000 : uNum;
+              }
+              if (!bags && packSize > 0 && sheetQtyKg > 0) {
+                bags = Math.round(sheetQtyKg / packSize);
+              }
+
+              if (!rawProduct && bags === 0) continue;
+
+              const unit = normalizeUnitLabel(rawUnit, packSize, rawProduct);
+              const panni = normalizePanniType(rawPanni);
+              const matchedRule = findRateRule(rawProduct, unit, panni);
+              const autoRateMT = matchedRule ? Number(matchedRule.baseRate) : 0;
+
+              let warning = '';
+              if (rowWorker === 'Unknown Worker') warning = 'Check Worker';
+              else if (bags <= 0 || packSize <= 0) warning = 'Check Bags/Kg';
+              else if (autoRateMT <= 0) warning = 'No Rate Rule';
+
+              parsedRows.push({
+                tempId: 'imp-' + parsedRows.length + '-' + Date.now(),
+                selected: true,
+                worker: rowWorker,
+                type: 'packing',
+                date: parsedDate || appState.filterTo || new Date().toISOString().slice(0, 10),
+                product: rawProduct,
+                unit,
+                panni,
+                packSize,
+                bags,
+                manualRateMT: autoRateMT > 0 ? null : 0,
+                autoRateMT,
+                remark: colMap.remark >= 0 ? String(aoa[r][colMap.remark] || '').trim() : '',
+                warning
+              });
+            }
+          });
+
+          if (parsedRows.length === 0) {
+            showToast('No valid production rows found in uploaded file.', 'error');
+            event.target.value = '';
+            return;
+          }
+
+          stagedImportRows = parsedRows;
+          document.getElementById('import-modal-title').textContent = `Verify Sheet: ${file.name}`;
+          renderImportPreviewTable();
+          document.getElementById('excel-import-modal').classList.remove('hidden');
+        } catch (err) {
+          console.error(err);
+          showToast('Error reading Excel file. Please check format.', 'error');
+        }
+        event.target.value = '';
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function renderImportPreviewTable() {
+      const workerCounts = {};
+      let selectedCount = 0;
+      let totalKg = 0;
+      let totalAmt = 0;
+
+      // Sum total cumulative MT per worker + matched rule (existing ledger tonnage + all selected import rows)
+      const totalImportMT = {};
+
+      stagedImportRows.forEach(row => {
+        if (!row.selected || row.type !== 'packing') return;
+        const rule = findRateRule(row.product, row.unit, row.panni);
+        if (!rule) return;
+        const scope = appState.slabScope === 'factory' ? 'ALL' : row.worker;
+        const key = `${scope}::${rule.id}`;
+        const kg = (Number(row.packSize) || 0) * (Number(row.bags) || 0);
+        totalImportMT[key] = (totalImportMT[key] || 0) + (kg / 1000);
+      });
+
+      // Add existing MT from already saved entries in the same month/range
+      const existingComputed = computeFilteredLedger(appState.filterFrom, appState.filterTo);
+      existingComputed.forEach(e => {
+        if (e.type !== 'packing' || !e.matchedRule) return;
+        const scope = appState.slabScope === 'factory' ? 'ALL' : e.worker;
+        const key = `${scope}::${e.matchedRule.id}`;
+        totalImportMT[key] = (totalImportMT[key] || 0) + e.qtyMT;
+      });
+
+      const computedRowResults = stagedImportRows.map(row => {
+        const isPacking = row.type === 'packing';
+        const kg = isPacking ? (Number(row.packSize) || 0) * (Number(row.bags) || 0) : 0;
+        const qtyMT = kg / 1000;
+        const rule = isPacking ? findRateRule(row.product, row.unit, row.panni) : null;
+
+        let effectiveRateMT = isPacking
+          ? (row.manualRateMT !== null ? Number(row.manualRateMT) : (rule ? Number(rule.baseRate) : 0))
+          : Number(row.manualRateMT || 0);
+        let slabTag = '';
+
+        // Full-Quantity Retroactive Upgrade: if total MT > threshold (e.g. 7 MT > 6 MT),
+        // 100% of every row for that product/worker gets the higher slabRate uniformly (NO splitting).
+        if (row.selected && isPacking && row.manualRateMT === null && rule && rule.thresholdMT > 0 && rule.slabRate > 0 && qtyMT > 0) {
+          const scope = appState.slabScope === 'factory' ? 'ALL' : row.worker;
+          const key = `${scope}::${rule.id}`;
+          const thresh = Number(rule.thresholdMT);
+          const grandMT = totalImportMT[key] || qtyMT;
+
+          if (grandMT > thresh) {
+            effectiveRateMT = Number(rule.slabRate);
+            slabTag = `>${thresh} MT Full Rate`;
+          }
+        }
+
+        const amt = isPacking ? qtyMT * effectiveRateMT : (Number(row.bags) || 0) * effectiveRateMT;
+
+        if (row.selected) {
+          selectedCount++;
+          workerCounts[row.worker] = (workerCounts[row.worker] || 0) + 1;
+          totalKg += kg;
+          totalAmt += amt;
+        }
+
+        return { kg, effectiveRateMT, amt, slabTag };
+      });
+
+      document.getElementById('import-worker-summary').innerHTML = Object.entries(workerCounts)
+        .map(([w, cnt]) => {
+          const isNew = !appState.workers.some(existing => existing.toLowerCase() === w.toLowerCase());
+          return `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+              w === 'Unknown Worker'
+                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                : isNew
+                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            }">
+              <span>${w}</span>
+              <span class="px-1.5 py-0.2 rounded-full bg-white text-slate-700 text-[10px] tabular-nums">${cnt}</span>
+              ${isNew && w !== 'Unknown Worker' ? '<span class="text-[9px] uppercase text-indigo-600">New</span>' : ''}
+            </span>
+          `;
+        }).join('');
+
+      document.getElementById('import-selected-count').textContent = selectedCount;
+      document.getElementById('import-total-kg').textContent = `${totalKg.toLocaleString('en-IN')} Kg`;
+      document.getElementById('import-total-amt').textContent = `₹${totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const baseUnitOptions = ['1kg','2kg','3kg','4kg','5kg','8kg','10kg','15kg','20kg','25kg','30kg','50kg','500gm','250gm','100gm'];
+      const panniOptions = ['Without Panni','With Panni','Open','Bucket','Carton','Transfer'];
+
+      document.getElementById('import-preview-tbody').innerHTML = stagedImportRows.map((row, idx) => {
+        const isPacking = row.type === 'packing';
+        const { kg, effectiveRateMT: rateMT, amt, slabTag } = computedRowResults[idx];
+
+        const hasWarn = Boolean(row.warning) || (isPacking && rateMT <= 0) || row.worker === 'Unknown Worker';
+        const rowUnits = row.unit && !baseUnitOptions.includes(row.unit)
+          ? [row.unit, ...baseUnitOptions]
+          : baseUnitOptions;
+
+        return `
+          <tr class="${hasWarn ? 'bg-amber-50/70' : 'hover:bg-slate-50'}">
+            <td class="py-2 px-3 text-center">
+              <input type="checkbox" ${row.selected ? 'checked' : ''} onchange="updateImportRow(${idx}, 'selected', this.checked)" class="rounded border-slate-300 cursor-pointer" />
+            </td>
+            <td class="py-2 px-2">
+              <input type="text" value="${row.worker}" onchange="updateImportRow(${idx}, 'worker', this.value)" class="w-32 px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-900" />
+            </td>
+            <td class="py-2 px-2">
+              <input type="date" value="${row.date}" onchange="updateImportRow(${idx}, 'date', this.value)" class="px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs tabular-nums" />
+            </td>
+            <td class="py-2 px-2">
+              <input type="text" value="${row.product}" onchange="updateImportRow(${idx}, 'product', this.value)" class="w-36 px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-900" />
+            </td>
+            <td class="py-2 px-2">
+              ${isPacking ? `
+                <select onchange="updateImportRow(${idx}, 'unit', this.value)" class="px-1.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-semibold">
+                  ${rowUnits.map(u => `<option value="${u}" ${row.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                </select>
+              ` : '<span class="text-slate-400">—</span>'}
+            </td>
+            <td class="py-2 px-2">
+              ${isPacking ? `
+                <select onchange="updateImportRow(${idx}, 'panni', this.value)" class="px-1.5 py-1 rounded-lg border border-slate-200 bg-white text-xs">
+                  ${panniOptions.map(p => `<option value="${p}" ${row.panni === p ? 'selected' : ''}>${p}</option>`).join('')}
+                </select>
+              ` : '<span class="text-slate-400">—</span>'}
+            </td>
+            <td class="py-2 px-2 text-right">
+              ${isPacking ? `<input type="number" step="0.01" value="${row.packSize}" onchange="updateImportRow(${idx}, 'packSize', this.value)" class="w-14 px-1.5 py-1 rounded-lg border border-slate-200 bg-white text-xs text-right tabular-nums" />` : '—'}
+            </td>
+            <td class="py-2 px-2 text-right">
+              <input type="number" step="1" value="${row.bags}" onchange="updateImportRow(${idx}, 'bags', this.value)" class="w-16 px-1.5 py-1 rounded-lg border border-slate-200 bg-white text-xs text-right font-bold tabular-nums" />
+            </td>
+            <td class="py-2 px-2 text-right tabular-nums font-semibold text-slate-700">
+              ${isPacking ? kg.toLocaleString('en-IN') : '—'}
+            </td>
+            <td class="py-2 px-2 text-right">
+              <input type="number" step="0.01" value="${rateMT}" onchange="updateImportRow(${idx}, 'rate', this.value)" class="w-16 px-1.5 py-1 rounded-lg border border-emerald-300 bg-white text-xs text-right font-bold tabular-nums text-emerald-800" />
+            </td>
+            <td class="py-2 px-3 text-right tabular-nums font-extrabold text-slate-900">
+              ₹${amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td class="py-2 px-3 whitespace-nowrap">
+              ${hasWarn
+                ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">⚠ ${row.warning || 'Check Rate'}</span>`
+                : slabTag
+                ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">⚡ ${slabTag}</span>`
+                : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">✓ Auto-Matched</span>`}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateImportRow(idx, field, val) {
+      const row = stagedImportRows[idx];
+      if (!row) return;
+
+      if (field === 'selected') {
+        row.selected = Boolean(val);
+      } else if (field === 'worker') {
+        row.worker = normalizeWorkerName(val) || 'Unknown Worker';
+        row.warning = row.worker === 'Unknown Worker' ? 'Check Worker' : '';
+      } else if (field === 'date') {
+        row.date = val;
+      } else if (field === 'product') {
+        row.product = String(val).trim();
+        if (row.type === 'packing') {
+          const rule = findRateRule(row.product, row.unit, row.panni);
+          row.autoRateMT = rule ? Number(rule.baseRate) : 0;
+          row.manualRateMT = row.autoRateMT > 0 ? null : 0;
+          row.warning = row.autoRateMT <= 0 ? 'No Rate Rule' : '';
+        }
+      } else if (field === 'unit' || field === 'panni') {
+        row[field] = val;
+        if (row.type === 'packing') {
+          const rule = findRateRule(row.product, row.unit, row.panni);
+          row.autoRateMT = rule ? Number(rule.baseRate) : 0;
+          row.manualRateMT = row.autoRateMT > 0 ? null : 0;
+          row.warning = row.autoRateMT <= 0 ? 'No Rate Rule' : '';
+        }
+      } else if (field === 'packSize') {
+        row.packSize = parseFloat(val) || 0;
+      } else if (field === 'bags') {
+        row.bags = parseFloat(val) || 0;
+      } else if (field === 'rate') {
+        const num = parseFloat(val) || 0;
+        row.manualRateMT = num;
+        if (num > 0 && row.warning === 'No Rate Rule') row.warning = '';
+      }
+
+      renderImportPreviewTable();
+    }
+
+    function toggleAllImportRows(checked) {
+      stagedImportRows.forEach(r => { r.selected = checked; });
+      renderImportPreviewTable();
+    }
+
+    function closeExcelImportModal() {
+      document.getElementById('excel-import-modal').classList.add('hidden');
+      stagedImportRows = [];
+    }
+
+    async function confirmAndCommitImport() {
+      const toCommit = stagedImportRows.filter(r => r.selected);
+      if (toCommit.length === 0) {
+        showToast('Please select at least one row to import.', 'error');
+        return;
+      }
+
+      let addedCount = 0;
+      let newWorkersCount = 0;
+      let minDate = '';
+      let maxDate = '';
+
+      toCommit.forEach((row, i) => {
+        const cleanWorker = normalizeWorkerName(row.worker) || 'Unknown Worker';
+        if (!appState.workers.some(w => w.toLowerCase() === cleanWorker.toLowerCase())) {
+          appState.workers.push(cleanWorker);
+          newWorkersCount++;
+        }
+        const canonicalWorker = appState.workers.find(w => w.toLowerCase() === cleanWorker.toLowerCase()) || cleanWorker;
+
+        if (row.date) {
+          if (!minDate || row.date < minDate) minDate = row.date;
+          if (!maxDate || row.date > maxDate) maxDate = row.date;
+        }
+
+        if (row.type === 'packing') {
+          const rule = findRateRule(row.product, row.unit, row.panni);
+          const autoBase = rule ? Number(rule.baseRate) : 0;
+          const useManual = row.manualRateMT !== null && Number(row.manualRateMT) !== autoBase;
+
+          appState.entries.push({
+            id: `imp-${Date.now()}-${i}`,
+            worker: canonicalWorker,
+            type: 'packing',
+            date: row.date,
+            product: row.product,
+            unit: row.unit,
+            panni: row.panni,
+            packSize: Number(row.packSize) || 0,
+            bags: Number(row.bags) || 0,
+            remark: row.remark || '',
+            manualRateMT: useManual ? Number(row.manualRateMT) : null
+          });
+        } else {
+          appState.entries.push({
+            id: `imp-misc-${Date.now()}-${i}`,
+            worker: canonicalWorker,
+            type: row.type === 'lot' ? 'lot' : 'labour',
+            date: row.date,
+            product: row.product,
+            count: Number(row.bags) || 1,
+            rate: Number(row.manualRateMT) || 0,
+            remark: row.remark || ''
+          });
+        }
+        addedCount++;
+      });
+
+      if (minDate && maxDate) {
+        appState.filterFrom = minDate.slice(0, 7) + '-01';
+        const [y, m] = maxDate.slice(0, 7).split('-');
+        const lastDay = new Date(Number(y), Number(m), 0).getDate();
+        appState.filterTo = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+      }
+
+      if (toCommit[0]) {
+        const firstWorker = normalizeWorkerName(toCommit[0].worker);
+        const match = appState.workers.find(w => w.toLowerCase() === firstWorker.toLowerCase());
+        if (match) appState.activeWorker = match;
+      }
+
+      closeExcelImportModal();
+      await persistAppState();
+      syncDates();
+      populateProductSuggestions();
+      renderDashboard();
+      showToast(`Imported ${addedCount} entries${newWorkersCount > 0 ? ` & created ${newWorkersCount} new worker(s)` : ''}!`);
+    }
+
+    document.addEventListener('click', (e) => {
+      const wrapper = document.getElementById('export-dropdown-wrapper');
+      if (wrapper && !wrapper.contains(e.target)) {
+        document.getElementById('export-menu').classList.add('hidden');
+      }
+      const prodInput = document.getElementById('p-product');
+      const prodDrop = document.getElementById('product-smart-dropdown');
+      if (prodInput && prodDrop && !prodInput.contains(e.target) && !prodDrop.contains(e.target)) {
+        prodDrop.classList.add('hidden');
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      bootApp();
+    });
+
+    /*************************************************************************
+     * 12. COMPANY & PRODUCT SUMMARY MODAL + PRINTABLE A4 PAYMENT VOUCHER
+     *************************************************************************/
+    function openProductionSummaryModal() {
+      const all = computeFilteredLedger(appState.filterFrom, appState.filterTo);
+      const periodText = appState.filterFrom || appState.filterTo
+        ? `${appState.filterFrom || 'Start'} to ${appState.filterTo || 'Present'}`
+        : 'All Months';
+      document.getElementById('summary-period-label').textContent = `Period: ${periodText} • Unit-2 Factory Breakdown`;
+
+      const brandMap = {};
+      const productMap = {};
+
+      all.forEach(e => {
+        if (e.type !== 'packing') return;
+        const { companyPrefix, coreProduct } = extractCompanyAndProduct(e.product);
+        const brand = (companyPrefix || 'Other / Direct').toUpperCase();
+        const prod = `${coreProduct || e.product} (${e.unit} • ${e.panni})`;
+
+        if (!brandMap[brand]) brandMap[brand] = { bags: 0, kg: 0, amt: 0 };
+        brandMap[brand].bags += Number(e.bags) || 0;
+        brandMap[brand].kg += e.qtyKg;
+        brandMap[brand].amt += e.totalAmount;
+
+        if (!productMap[prod]) productMap[prod] = { bags: 0, kg: 0, amt: 0 };
+        productMap[prod].bags += Number(e.bags) || 0;
+        productMap[prod].kg += e.qtyKg;
+        productMap[prod].amt += e.totalAmount;
+      });
+
+      const brandRows = Object.entries(brandMap).sort((a, b) => b[1].kg - a[1].kg);
+      const prodRows = Object.entries(productMap).sort((a, b) => b[1].kg - a[1].kg);
+
+      document.getElementById('summary-modal-body').innerHTML = `
+        <div>
+          <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2.5">Company / Brand-Wise Production</h4>
+          <div class="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead class="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                <tr>
+                  <th class="py-2.5 px-4">Company / Brand</th>
+                  <th class="py-2.5 px-3 text-right">Total Bags</th>
+                  <th class="py-2.5 px-3 text-right">Weight (Kg)</th>
+                  <th class="py-2.5 px-3 text-right">Tonnage (MT)</th>
+                  <th class="py-2.5 px-4 text-right">Packing Cost (₹)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                ${brandRows.length ? brandRows.map(([b, d]) => `
+                  <tr>
+                    <td class="py-2.5 px-4 font-bold text-slate-900">${b}</td>
+                    <td class="py-2.5 px-3 text-right tabular-nums">${d.bags.toLocaleString('en-IN')}</td>
+                    <td class="py-2.5 px-3 text-right tabular-nums">${d.kg.toLocaleString('en-IN')}</td>
+                    <td class="py-2.5 px-3 text-right tabular-nums font-semibold text-indigo-700">${(d.kg / 1000).toFixed(3)} MT</td>
+                    <td class="py-2.5 px-4 text-right tabular-nums font-extrabold text-emerald-700">₹${d.amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                `).join('') : `<tr><td colspan="5" class="py-6 text-center text-slate-400">No packing entries in selected period.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2.5">Product & SKU-Wise Production</h4>
+          <div class="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead class="bg-slate-50 text-[10px] font-bold uppercase text-slate-500 border-b border-slate-200">
+                <tr>
+                  <th class="py-2.5 px-4">Product & Packing</th>
+                  <th class="py-2.5 px-3 text-right">Total Bags</th>
+                  <th class="py-2.5 px-3 text-right">Weight (Kg)</th>
+                  <th class="py-2.5 px-3 text-right">Tonnage (MT)</th>
+                  <th class="py-2.5 px-4 text-right">Packing Cost (₹)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                ${prodRows.length ? prodRows.map(([p, d]) => `
+                  <tr>
+                    <td class="py-2.5 px-4 font-bold text-slate-900">${p}</td>
+                    <td class="py-2.5 px-3 text-right tabular-nums">${d.bags.toLocaleString('en-IN')}</td>
+                    <td class="py-2.5 px-3 text-right tabular-nums">${d.kg.toLocaleString('en-IN')}</td>
+                    <td class="py-2.5 px-3 text-right tabular-nums font-semibold text-indigo-700">${(d.kg / 1000).toFixed(3)} MT</td>
+                    <td class="py-2.5 px-4 text-right tabular-nums font-extrabold text-emerald-700">₹${d.amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                `).join('') : `<tr><td colspan="5" class="py-6 text-center text-slate-400">No packing entries in selected period.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('summary-modal').classList.remove('hidden');
+    }
+
+    function closeProductionSummaryModal() {
+      document.getElementById('summary-modal').classList.add('hidden');
+    }
+
+    function buildVoucherMarkup() {
+      const worker = appState.activeWorker;
+      const entries = computeFilteredLedger(appState.filterFrom, appState.filterTo).filter(e => e.worker === worker);
+      const periodText = appState.filterFrom || appState.filterTo
+        ? `${appState.filterFrom || 'Start'} to ${appState.filterTo || 'Present'}`
+        : 'All Months';
+      const generatedDate = formatDate(new Date().toISOString().slice(0, 10));
+
+      let totalBags = 0, totalKg = 0, grossAmt = 0, advanceAmt = 0;
+      entries.forEach(e => {
+        if (e.type === 'packing') {
+          totalBags += Number(e.bags) || 0;
+          totalKg += e.qtyKg;
+          grossAmt += e.totalAmount;
+        } else if (e.type === 'advance') {
+          advanceAmt += e.totalAmount;
+        } else {
+          grossAmt += e.totalAmount;
+        }
+      });
+      const netPayable = grossAmt - advanceAmt;
+
+      return `
+        <div class="border-2 border-slate-800 p-6 rounded-xl space-y-5 text-slate-900 bg-white">
+          <div class="flex items-start justify-between border-b-2 border-slate-800 pb-4">
+            <div>
+              <div class="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Production & Packing Division</div>
+              <h2 class="text-xl font-extrabold uppercase tracking-tight mt-0.5">Packing Payment Slip</h2>
+              <p class="text-xs text-slate-600 mt-1">Worker / Contractor: <strong class="text-slate-900 text-sm">${worker}</strong></p>
+            </div>
+            <div class="text-right text-xs space-y-0.5">
+              <div class="font-bold text-slate-900">Billing Period</div>
+              <div class="text-slate-700 font-semibold">${periodText}</div>
+              <div class="text-[11px] text-slate-500">Slip Date: ${generatedDate}</div>
+            </div>
+          </div>
+
+          <table class="w-full text-left border-collapse text-xs border border-slate-300">
+            <thead class="bg-slate-100 border-b border-slate-300 font-bold uppercase text-[10px]">
+              <tr>
+                <th class="py-2 px-2.5 border-r border-slate-300">Date</th>
+                <th class="py-2 px-2.5 border-r border-slate-300">Product / Work</th>
+                <th class="py-2 px-2 text-center border-r border-slate-300">Unit</th>
+                <th class="py-2 px-2 text-center border-r border-slate-300">Liner</th>
+                <th class="py-2 px-2 text-right border-r border-slate-300">Bag Kg</th>
+                <th class="py-2 px-2 text-right border-r border-slate-300">Bags</th>
+                <th class="py-2 px-2 text-right border-r border-slate-300">Qty (Kg)</th>
+                <th class="py-2 px-2 text-right border-r border-slate-300">Rate (/MT)</th>
+                <th class="py-2 px-2.5 text-right">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              ${entries.length ? entries.map(e => {
+                const isPacking = e.type === 'packing';
+                const isAdv = e.type === 'advance';
+                return `
+                  <tr>
+                    <td class="py-1.5 px-2.5 border-r border-slate-200 tabular-nums whitespace-nowrap">${formatDate(e.date)}</td>
+                    <td class="py-1.5 px-2.5 border-r border-slate-200 font-semibold">${e.product}${e.slabApplied ? ` <span class="text-[10px] font-bold text-amber-800">(${e.slabNote})</span>` : ''}</td>
+                    <td class="py-1.5 px-2 text-center border-r border-slate-200">${isPacking ? e.unit : '—'}</td>
+                    <td class="py-1.5 px-2 text-center border-r border-slate-200">${isPacking ? e.panni : '—'}</td>
+                    <td class="py-1.5 px-2 text-right border-r border-slate-200 tabular-nums">${isPacking ? e.packSize : '—'}</td>
+                    <td class="py-1.5 px-2 text-right border-r border-slate-200 tabular-nums">${isPacking ? e.bags : e.count}</td>
+                    <td class="py-1.5 px-2 text-right border-r border-slate-200 tabular-nums">${isPacking ? e.qtyKg.toLocaleString('en-IN') : '—'}</td>
+                    <td class="py-1.5 px-2 text-right border-r border-slate-200 tabular-nums">${isPacking ? '₹' + e.appliedRateMT : '₹' + e.rate}</td>
+                    <td class="py-1.5 px-2.5 text-right tabular-nums font-bold ${isAdv ? 'text-rose-700' : ''}">${isAdv ? '- ' : ''}₹${e.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                `;
+              }).join('') : `<tr><td colspan="9" class="py-6 text-center text-slate-400">No entries recorded for this period.</td></tr>`}
+            </tbody>
+          </table>
+
+          <div class="flex justify-end">
+            <div class="w-80 border border-slate-300 rounded-lg p-3.5 space-y-1.5 text-xs bg-slate-50">
+              <div class="flex justify-between"><span>Total Bags / Weight:</span><strong>${totalBags.toLocaleString('en-IN')} Bags (${(totalKg / 1000).toFixed(3)} MT)</strong></div>
+              <div class="flex justify-between"><span>Gross Bill Amount:</span><strong>₹ ${grossAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
+              <div class="flex justify-between text-rose-700"><span>Less: Advance / Kharchi:</span><strong>- ₹ ${advanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
+              <div class="border-t border-slate-300 pt-1.5 flex justify-between text-sm font-extrabold text-slate-900"><span>Net Final Payable:</span><span>₹ ${netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-8 pt-12 text-xs text-slate-600">
+            <div class="border-t border-slate-400 pt-2 text-center font-semibold">Worker / Contractor Signature</div>
+            <div class="border-t border-slate-400 pt-2 text-center font-semibold">Authorized Signatory</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openPrintVoucherModal() {
+      const markup = buildVoucherMarkup();
+      document.getElementById('print-voucher-content').innerHTML = markup;
+      document.getElementById('print-voucher-area').innerHTML = markup;
+      document.getElementById('print-voucher-modal').classList.remove('hidden');
+    }
+
+    function triggerVoucherPrint() {
+      const markup = buildVoucherMarkup();
+      const printArea = document.getElementById('print-voucher-area');
+      printArea.innerHTML = markup;
+
+      // Close modal cleanly so fixed backdrop never interferes with browser print preview
+      document.getElementById('print-voucher-modal').classList.add('hidden');
+
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const isSandboxedIframe = window.self !== window.top;
+          if (isSandboxedIframe) {
+            openStandalonePrintWindow(markup);
+            return;
+          }
+          try {
+            window.focus();
+            window.print();
+          } catch (err) {
+            openStandalonePrintWindow(markup);
+          }
+        }, 80);
+      });
+    }
+
+    function openStandalonePrintWindow(markup) {
+      const printWin = window.open('', '_blank', 'width=900,height=700');
+      if (!printWin) {
+        // Fallback to direct window.print() if popup blocker prevents opening a new window
+        window.focus();
+        window.print();
+        return;
+      }
+      printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Packing Payment Slip - ${appState.activeWorker}</title>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>
+    @page { size: A4 portrait; margin: 12mm; }
+    body { font-family: Arial, sans-serif; background: #fff; color: #0f172a; padding: 16px; }
+  </style>
+</head>
+<body onload="setTimeout(() => { window.print(); }, 350);">
+  ${markup}
+</body>
+</html>`);
+      printWin.document.close();
+    }
+
+    function closePrintVoucherModal() {
+      document.getElementById('print-voucher-modal').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
